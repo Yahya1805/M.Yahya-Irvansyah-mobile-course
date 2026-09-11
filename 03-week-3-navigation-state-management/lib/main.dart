@@ -1,24 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'pages/detail_page.dart';
+import 'pages/home_page.dart';
 
 void main() => runApp(const MyApp());
+
+final _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomePage(),
+      routes: [
+        GoRoute(
+          path: 'detail/:id',
+          builder: (context, state) => DetailPage(
+            id: state.pathParameters['id']!,
+          ),
+        ),
+      ],
+    ),
+  ],
+);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Profil Mahasiswa')),
-        body: const Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.school, size: 72),
-            SizedBox(height: 16),
-            Text('M.Yahya Irvansyah', style: TextStyle(fontSize: 24)),
-            Text('Pemrograman Mobile — Minggu 1'),
-          ]),
-        ),
-      ),
+    return MaterialApp.router(
+      title: 'Week 3 - Navigation',
+      routerConfig: _router,
+      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
     );
   }
 }
