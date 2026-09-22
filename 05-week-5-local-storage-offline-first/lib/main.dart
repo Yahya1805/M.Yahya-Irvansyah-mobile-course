@@ -1,24 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'data/prefs.dart';
+import 'pages/settings_page.dart';
+import 'providers/prefs_providers.dart';
 
-void main() => runApp(const MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefsRepository = PrefsRepository();
+  await prefsRepository.markOpenedNow();
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        prefsRepositoryProvider.overrideWithValue(prefsRepository),
+      ],
+      child: const MyApp(),
+    ),
+  );
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Profil Mahasiswa')),
-        body: const Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.school, size: 72),
-            SizedBox(height: 16),
-            Text('M.Yahya Irvansyah', style: TextStyle(fontSize: 24)),
-            Text('Pemrograman Mobile — Minggu 1'),
-          ]),
-        ),
-      ),
+    return Consumer(
+      builder: (context, ref, child) {
+        final darkMode = ref.watch(darkModeProvider);
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            colorSchemeSeed: Colors.teal,
+            brightness: Brightness.light,
+            useMaterial3: true,
+          ),
+          darkTheme: ThemeData(
+            colorSchemeSeed: Colors.teal,
+            brightness: Brightness.dark,
+            useMaterial3: true,
+          ),
+          themeMode: darkMode.when(
+            data: (value) => value ? ThemeMode.dark : ThemeMode.light,
+            loading: () => ThemeMode.light,
+            error: (_, _) => ThemeMode.light,
+          ),
+          home: const SettingsPage(),
+        );
+      },
     );
   }
 }
