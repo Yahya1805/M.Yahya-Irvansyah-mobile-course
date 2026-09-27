@@ -53,9 +53,8 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                     : 'Cache dibaca, lalu jaringan di-refresh di background.',
               ),
               value: offline,
-              onChanged: (value) => ref
-                  .read(forceOfflineProvider.notifier)
-                  .setOffline(value),
+              onChanged: (value) =>
+                  ref.read(forceOfflineProvider.notifier).setOffline(value),
             ),
             const SizedBox(height: 8),
             Row(
@@ -119,15 +118,21 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     }
 
     setState(() => _syncing = true);
-    final count = await syncNotes(ref.read(noteRepositoryProvider));
-    ref.invalidate(notesProvider);
-    if (!mounted) return;
-    setState(() => _syncing = false);
-    _showMessage(
-      count == 0
-          ? 'Tidak ada catatan yang perlu disinkronkan.'
-          : '$count catatan berhasil disinkronkan.',
-    );
+    try {
+      final count = await syncNotes(ref.read(noteRepositoryProvider));
+      ref.invalidate(notesProvider);
+      if (!mounted) return;
+      setState(() => _syncing = false);
+      _showMessage(
+        count == 0
+            ? 'Tidak ada catatan yang perlu disinkronkan.'
+            : '$count catatan berhasil disinkronkan.',
+      );
+    } on SyncException catch (error) {
+      if (!mounted) return;
+      setState(() => _syncing = false);
+      _showMessage(error.message);
+    }
   }
 
   Future<void> _showAddNoteDialog(BuildContext context) async {
@@ -137,10 +142,9 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     );
     if (result == null || result.$1.trim().isEmpty) return;
 
-    await ref.read(notesProvider.notifier).addNote(
-          title: result.$1.trim(),
-          body: result.$2.trim(),
-        );
+    await ref
+        .read(notesProvider.notifier)
+        .addNote(title: result.$1.trim(), body: result.$2.trim());
   }
 
   void _showMessage(String message) {
@@ -173,20 +177,47 @@ class _NotesList extends ConsumerWidget {
                       ? Icons.cloud_upload_outlined
                       : Icons.cloud_done_outlined,
                 ),
-                trailing: IconButton(
-                  onPressed: note.id == null
-                      ? null
-                      : () => ref
-                          .read(notesProvider.notifier)
-                          .deleteNote(note.id!),
-                  tooltip: 'Hapus catatan',
-                  icon: const Icon(Icons.delete_outline),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      onPressed: note.id == null
+                          ? null
+                          : () => _editNote(context, ref, note),
+                      tooltip: 'Edit catatan',
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      onPressed: note.id == null
+                          ? null
+                          : () => ref
+                                .read(notesProvider.notifier)
+                                .deleteNote(note.id!),
+                      tooltip: 'Hapus catatan',
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
                 ),
               ),
             ),
           )
           .toList(),
     );
+  }
+
+  Future<void> _editNote(BuildContext context, WidgetRef ref, Note note) async {
+    final result = await showDialog<(String, String)?>(
+      context: context,
+      builder: (_) => _EditNoteDialog(note: note),
+    );
+    if (result == null || result.$1.trim().isEmpty || note.id == null) return;
+    await ref
+        .read(notesProvider.notifier)
+        .updateNote(
+          id: note.id!,
+          title: result.$1.trim(),
+          body: result.$2.trim(),
+        );
   }
 }
 
@@ -259,10 +290,58 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
           child: const Text('Batal'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            (_titleController.text, _bodyController.text),
+          onPressed: () => Navigator.pop(context, (
+            _titleController.text,
+            _bodyController.text,
+          )),
+          child: const Text('Simpan'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditNoteDialog extends _AddNoteDialog {
+  const _EditNoteDialog({required this.note});
+
+  final Note note;
+
+  @override
+  State<_AddNoteDialog> createState() => _EditNoteDialogState();
+}
+
+class _EditNoteDialogState extends _AddNoteDialogState {
+  @override
+  Widget build(BuildContext context) {
+    final dialog = widget as _EditNoteDialog;
+    _titleController.text = dialog.note.title;
+    _bodyController.text = dialog.note.body;
+    return AlertDialog(
+      title: const Text('Edit catatan'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _titleController,
+            decoration: const InputDecoration(labelText: 'Judul'),
           ),
+          TextField(
+            controller: _bodyController,
+            decoration: const InputDecoration(labelText: 'Isi'),
+            maxLines: 3,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, (
+            _titleController.text,
+            _bodyController.text,
+          )),
           child: const Text('Simpan'),
         ),
       ],

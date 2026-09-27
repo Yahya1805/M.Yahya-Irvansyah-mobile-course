@@ -5,7 +5,7 @@ import '../local/note.dart';
 
 class NoteRepository {
   NoteRepository({Future<Database> Function()? openDb})
-      : _openDb = openDb ?? openNotesDb;
+    : _openDb = openDb ?? openNotesDb;
 
   final Future<Database> Function() _openDb;
 
@@ -15,11 +15,28 @@ class NoteRepository {
     return rows.map(Note.fromMap).toList();
   }
 
+  Future<List<Note>> fetchDirtyNotes() async {
+    final db = await _openDb();
+    final rows = await db.query(
+      'notes',
+      where: 'dirty = 1',
+      orderBy: 'updated_at ASC',
+    );
+    return rows.map(Note.fromMap).toList();
+  }
+
+  Future<Note?> getNote(int id) async {
+    final db = await _openDb();
+    final rows = await db.query('notes', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : Note.fromMap(rows.first);
+  }
+
   Future<Note> addNote({required String title, String body = ''}) async {
     final db = await _openDb();
     final note = Note(
       title: title,
       body: body,
+      createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       dirty: true,
     );
@@ -28,8 +45,28 @@ class NoteRepository {
       id: id,
       title: note.title,
       body: note.body,
+      createdAt: note.createdAt,
       updatedAt: note.updatedAt,
       dirty: true,
+    );
+  }
+
+  Future<void> updateNote({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    final db = await _openDb();
+    await db.update(
+      'notes',
+      {
+        'title': title,
+        'body': body,
+        'updated_at': DateTime.now().toIso8601String(),
+        'dirty': 1,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
@@ -46,8 +83,13 @@ class NoteRepository {
     return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
-  Future<void> markAllSynced() async {
+  Future<void> markSynced(int id) async {
     final db = await _openDb();
-    await db.update('notes', {'dirty': 0}, where: 'dirty = 1');
+    await db.update(
+      'notes',
+      {'dirty': 0},
+      where: 'id = ? AND dirty = 1',
+      whereArgs: [id],
+    );
   }
 }

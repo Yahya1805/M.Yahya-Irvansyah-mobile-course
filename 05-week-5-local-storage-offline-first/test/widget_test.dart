@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:week5_offline_notes/main.dart';
 
 void main() {
-  testWidgets('shows the SharedPreferences settings screen',
-      (WidgetTester tester) async {
+  testWidgets('shows the SharedPreferences settings screen', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const ProviderScope(child: MyApp()));
     await tester.pumpAndSettle();
 

@@ -347,8 +347,46 @@ flutter pub deps --style=compact
 
 Kesimpulan harus diambil dari hasil pengukuran, test, dokumentasi versi package yang digunakan, dan kebutuhan aplikasi; bukan dari rekomendasi ini saja.
 
+## 13. Implementasi Saat Ini
+
+Fitur yang sudah tersedia di aplikasi:
+
+- Dark mode dan waktu terakhir dibuka dengan SharedPreferences.
+- Catatan SQLite persisten dengan `created_at`, `updated_at`, dan `dirty`.
+- CRUD dasar: tambah, baca, edit, dan hapus catatan.
+- Sorting catatan berdasarkan `updated_at DESC`.
+- Cache-first untuk data posts dari JSONPlaceholder.
+- Force Offline untuk menguji tampilan cache tanpa request jaringan.
+- Sync catatan dirty ke endpoint simulasi dan penanganan kegagalan jaringan.
+- Test model dan provider dengan fake repository.
+
+Dokumentasi pendukung:
+
+- [Perbandingan storage](docs/storage-comparison.md)
+- [AI Challenge](docs/ai-challenge.md)
+- [Sinkronisasi dan konflik](docs/sync-conflict.md)
+
+## 14. Menjalankan Project
+
+Jalankan perintah berikut dari folder project ini:
+
+```powershell
+flutter pub get
+flutter run
+flutter analyze
+flutter test
+```
+
+Untuk membuktikan offline-first, buka halaman catatan, aktifkan **Force Offline**, lalu pastikan cache posts dan catatan lokal tetap tampil. Buat atau edit catatan untuk melihat ikon dirty, kemudian matikan Force Offline dan tekan **Sync** saat jaringan tersedia.
+
+Screenshot harus diambil dari aplikasi yang benar-benar dijalankan pada emulator/perangkat dan disimpan di folder `screenshots/`. Gambar contoh tidak dibuat otomatis oleh kode project.
+
 
 
 ![alt text](image-3.png)
 
 ![alt text](image-4.png)
+
+![alt text](image-5.png)
+
+![alt text](image-6.png)

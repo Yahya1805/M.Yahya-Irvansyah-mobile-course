@@ -19,8 +19,9 @@ final postsRepositoryProvider = Provider<PostsRepository>(
   (ref) => PostsRepository(),
 );
 
-final forceOfflineProvider =
-    NotifierProvider<ForceOfflineNotifier, bool>(ForceOfflineNotifier.new);
+final forceOfflineProvider = NotifierProvider<ForceOfflineNotifier, bool>(
+  ForceOfflineNotifier.new,
+);
 
 final postsProvider = AsyncNotifierProvider<PostsNotifier, List<Post>>(
   PostsNotifier.new,
@@ -49,6 +50,16 @@ class NotesNotifier extends AsyncNotifier<List<Note>> {
 
   Future<void> deleteNote(int id) async {
     await _repository.deleteNote(id);
+    ref.invalidateSelf();
+    await future;
+  }
+
+  Future<void> updateNote({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    await _repository.updateNote(id: id, title: title, body: body);
     ref.invalidateSelf();
     await future;
   }

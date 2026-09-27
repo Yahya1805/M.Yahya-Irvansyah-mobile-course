@@ -35,9 +35,8 @@ class SettingsPage extends ConsumerWidget {
               value: darkMode.value ?? false,
               onChanged: darkMode.isLoading
                   ? null
-                  : (value) => ref
-                        .read(darkModeProvider.notifier)
-                        .setDarkMode(value),
+                  : (value) =>
+                        ref.read(darkModeProvider.notifier).setDarkMode(value),
             ),
           ),
           const SizedBox(height: 16),
@@ -54,9 +53,9 @@ class SettingsPage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const NotesPage()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute<void>(builder: (_) => const NotesPage())),
             icon: const Icon(Icons.note_alt_outlined),
             label: const Text('Buka Catatan Offline'),
           ),

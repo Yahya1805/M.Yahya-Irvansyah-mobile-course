@@ -9,8 +9,8 @@ import '../local/post.dart';
 
 class PostsRepository {
   PostsRepository({Dio? dio, Future<Database> Function()? openDb})
-      : _dio = dio ?? Dio(),
-        _openDb = openDb ?? openNotesDb;
+    : _dio = dio ?? Dio(),
+      _openDb = openDb ?? openNotesDb;
 
   final Dio _dio;
   final Future<Database> Function() _openDb;
@@ -45,9 +45,11 @@ class PostsRepository {
     final db = await _openDb();
     final rows = await db.query('cached_posts', orderBy: 'id ASC');
     return rows
-        .map((row) => Post.fromJson(
-              jsonDecode(row['payload'] as String) as Map<String, dynamic>,
-            ))
+        .map(
+          (row) => Post.fromJson(
+            jsonDecode(row['payload'] as String) as Map<String, dynamic>,
+          ),
+        )
         .toList();
   }
 
@@ -55,15 +57,11 @@ class PostsRepository {
     final db = await _openDb();
     await db.transaction((transaction) async {
       for (final post in posts) {
-        await transaction.insert(
-          'cached_posts',
-          {
-            'id': post.id,
-            'payload': jsonEncode(post.toJson()),
-            'cached_at': DateTime.now().toIso8601String(),
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        await transaction.insert('cached_posts', {
+          'id': post.id,
+          'payload': jsonEncode(post.toJson()),
+          'cached_at': DateTime.now().toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
   }

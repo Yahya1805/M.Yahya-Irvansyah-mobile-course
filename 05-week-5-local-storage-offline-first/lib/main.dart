@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'data/prefs.dart';
 import 'pages/settings_page.dart';
 import 'providers/prefs_providers.dart';
@@ -11,9 +12,7 @@ Future<void> main() async {
 
   runApp(
     ProviderScope(
-      overrides: [
-        prefsRepositoryProvider.overrideWithValue(prefsRepository),
-      ],
+      overrides: [prefsRepositoryProvider.overrideWithValue(prefsRepository)],
       child: const MyApp(),
     ),
   );
