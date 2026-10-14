@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
-import '../../../../core/failures.dart';
 import '../../domain/entities/note.dart';
+import '../../domain/failures/failure.dart';
 import '../../domain/repositories/note_repository.dart';
 import '../models/note_model.dart';
 
@@ -40,6 +40,7 @@ class NoteRepositoryImpl implements NoteRepository {
         NoteModel(
           title: title,
           body: body,
+          createdAt: now,
           updatedAt: now,
           dirty: true,
         ).toMap(),
@@ -49,6 +50,7 @@ class NoteRepositoryImpl implements NoteRepository {
           id: id,
           title: title,
           body: body,
+          createdAt: now,
           updatedAt: now,
           dirty: true,
         ),
@@ -61,6 +63,55 @@ class NoteRepositoryImpl implements NoteRepository {
           'Catatan tidak dapat disimpan. Silakan coba lagi.',
         ),
       );
+    }
+  }
+
+  @override
+  Future<Failure?> updateNote({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    try {
+      final db = await _openDb();
+      final rows = await db.query(
+        'notes',
+        columns: ['created_at'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        return const LocalFailure('Catatan tidak ditemukan.');
+      }
+      final now = DateTime.now();
+      await db.update(
+        'notes',
+        NoteModel(
+          id: id,
+          title: title,
+          body: body,
+          createdAt: DateTime.tryParse(rows.first['created_at'] as String? ?? ''),
+          updatedAt: now,
+          dirty: true,
+        ).toMap()..remove('id'),
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      return null;
+    } catch (_) {
+      return const LocalFailure('Catatan tidak dapat diperbarui. Silakan coba lagi.');
+    }
+  }
+
+  @override
+  Future<Failure?> deleteNote(int id) async {
+    try {
+      final db = await _openDb();
+      await db.delete('notes', where: 'id = ?', whereArgs: [id]);
+      return null;
+    } catch (_) {
+      return const LocalFailure('Catatan tidak dapat dihapus. Silakan coba lagi.');
     }
   }
 }

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/failures.dart';
 import '../../../../core/format.dart';
 import '../../domain/entities/note.dart';
+import '../../domain/failures/failure.dart';
 import '../providers/notes_providers.dart';
 
 class NotesPage extends ConsumerWidget {
@@ -12,7 +12,7 @@ class NotesPage extends ConsumerWidget {
   Future<void> _addNote(BuildContext context, WidgetRef ref) async {
     final noteInput = await showDialog<({String title, String body})>(
       context: context,
-      builder: (context) => const _AddNoteDialog(),
+      builder: (context) => const _NoteDialog(),
     );
     if (noteInput == null || !context.mounted) return;
 
@@ -29,6 +29,64 @@ class NotesPage extends ConsumerWidget {
       return;
     }
 
+    ref.invalidate(notesProvider);
+  }
+
+  Future<void> _editNote(
+    BuildContext context,
+    WidgetRef ref,
+    Note note,
+  ) async {
+    final input = await showDialog<({String title, String body})>(
+      context: context,
+      builder: (context) => _NoteDialog(note: note),
+    );
+    if (input == null || !context.mounted || note.id == null) return;
+    final failure = await ref.read(updateNoteProvider).call(
+          id: note.id!,
+          title: input.title,
+          body: input.body,
+        );
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+      return;
+    }
+    ref.invalidate(notesProvider);
+  }
+
+  Future<void> _deleteNote(
+    BuildContext context,
+    WidgetRef ref,
+    Note note,
+  ) async {
+    if (note.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus catatan?'),
+        content: Text('Catatan "${note.title}" akan dihapus.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final failure = await ref.read(deleteNoteProvider).call(note.id!);
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+      return;
+    }
     ref.invalidate(notesProvider);
   }
 
@@ -60,7 +118,11 @@ class NotesPage extends ConsumerWidget {
         ),
         data: (notes) => notes.isEmpty
             ? const Center(child: Text('Belum ada catatan.'))
-            : _NotesList(notes),
+            : _NotesList(
+                notes,
+                onEdit: (note) => _editNote(context, ref, note),
+                onDelete: (note) => _deleteNote(context, ref, note),
+              ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _addNote(context, ref),
@@ -72,9 +134,11 @@ class NotesPage extends ConsumerWidget {
 }
 
 class _NotesList extends StatelessWidget {
-  const _NotesList(this.notes);
+  const _NotesList(this.notes, {required this.onEdit, required this.onDelete});
 
   final List<Note> notes;
+  final ValueChanged<Note> onEdit;
+  final ValueChanged<Note> onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -84,25 +148,52 @@ class _NotesList extends StatelessWidget {
         final note = notes[index];
         return ListTile(
           title: Text(note.title),
-          subtitle: note.body.isEmpty ? null : Text(note.body),
-          trailing: Text(formatDate(note.updatedAt)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (note.body.isNotEmpty) Text(note.body),
+              Text(formatDate(note.updatedAt)),
+            ],
+          ),
+          trailing: PopupMenuButton<String>(
+            tooltip: 'Aksi ${note.title}',
+            onSelected: (action) {
+              if (action == 'edit') onEdit(note);
+              if (action == 'delete') onDelete(note);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'edit', child: Text('Edit')),
+              PopupMenuItem(value: 'delete', child: Text('Hapus')),
+            ],
+            icon: const Icon(Icons.more_vert),
+          ),
         );
       },
     );
   }
 }
 
-class _AddNoteDialog extends StatefulWidget {
-  const _AddNoteDialog();
+class _NoteDialog extends StatefulWidget {
+  const _NoteDialog({this.note});
+
+  final Note? note;
 
   @override
-  State<_AddNoteDialog> createState() => _AddNoteDialogState();
+  State<_NoteDialog> createState() => _NoteDialogState();
 }
 
-class _AddNoteDialogState extends State<_AddNoteDialog> {
+class _NoteDialogState extends State<_NoteDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController.text = widget.note?.title ?? '';
+    _bodyController.text = widget.note?.body ?? '';
+  }
 
   @override
   void dispose() {
@@ -122,7 +213,7 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Tambah catatan'),
+      title: Text(widget.note == null ? 'Tambah catatan' : 'Edit catatan'),
       content: Form(
         key: _formKey,
         child: Column(

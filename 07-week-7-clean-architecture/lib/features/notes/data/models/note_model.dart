@@ -5,6 +5,7 @@ class NoteModel extends Note {
     super.id,
     required super.title,
     super.body = '',
+    super.createdAt,
     required super.updatedAt,
     super.dirty = false,
   });
@@ -13,7 +14,7 @@ class NoteModel extends Note {
         'id': id,
         'title': title,
         'body': body,
-        'created_at': updatedAt.toIso8601String(),
+        'created_at': (createdAt ?? updatedAt).toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
         'dirty': dirty ? 1 : 0,
       };
@@ -23,6 +24,7 @@ class NoteModel extends Note {
       id: (map['id'] as num?)?.toInt(),
       title: map['title'] as String? ?? '',
       body: map['body'] as String? ?? '',
+      createdAt: DateTime.tryParse(map['created_at'] as String? ?? ''),
       updatedAt: DateTime.tryParse(map['updated_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       dirty: ((map['dirty'] as num?)?.toInt() ?? 0) == 1,
@@ -33,6 +35,7 @@ class NoteModel extends Note {
         id: id,
         title: title,
         body: body,
+        createdAt: createdAt,
         updatedAt: updatedAt,
         dirty: dirty,
       );
