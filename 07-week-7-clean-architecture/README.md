@@ -90,4 +90,4 @@ Tes yang ada mencakup `GetNotes` sukses dan failure dengan fake repository, mapp
 - Use case satu baris untuk setiap operasi menambah file dan wiring. Untuk tim kecil biayanya sepadan jika boundary tiap aksi membantu testability/aturan, tetapi dapat disederhanakan ke controller saat operasi tetap trivial.
 - Usulan AI untuk memindah auth/announcements ditolak karena fitur tersebut bukan sumber refactor Week 5. Scope difokuskan pada Notes yang benar-benar tersedia.
 
-Laporan prompt, tabel usulan vs keputusan akhir, dan alasan teknis ada di [`docs/ai-challenge.md`](docs/ai-challenge.md).
+
