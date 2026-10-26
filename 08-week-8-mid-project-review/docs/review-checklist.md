@@ -238,6 +238,6 @@ git grep -E "presentation/" -- 08-week-8-mid-project-review/lib/features/notes/d
 | **Mesin Bersih** | `flutter analyze` 0 issue, `dart format` rapi, `flutter test` hijau. | ✅ **Lulus** | Output: 0 issues, 0 formatting errors, 14 tests pass. |
 | **Arsitektur Steril** | 3 pengujian grep Clean Architecture menghasilkan exit code 1 (steril). | ✅ **Lulus** | Domain independen, Presentation decoupled dari driver SQLite. |
 | **CI Automation** | `.github/workflows/ci.yml` aktif untuk memvalidasi setiap PR. | ✅ **Lulus** | File workflow siap di repository. |
-| **AI Verification** | Verifikasi temuan AI dengan bukti test & alasan penolakan tertulis. | ⏳ *Siap Tahap 6* | Siap dieksekusi pada AI Prompt Challenge (`docs/ai-review-vs-keputusan.md`). |
+| **AI Verification** | Verifikasi temuan AI dengan bukti test & alasan penolakan tertulis. | ✅ **Lulus** | Selesai diverifikasi di [ai-review-vs-keputusan.md](ai-review-vs-keputusan.md): 3 diterima, 2 ditolak secara teknis. |
 
 
