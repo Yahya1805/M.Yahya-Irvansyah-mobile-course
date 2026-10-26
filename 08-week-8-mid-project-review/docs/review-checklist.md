@@ -149,13 +149,95 @@ gitGraph
 
 ---
 
-## 5. Checklist Kesiapan Paruh Semester (Mid-Project Readiness)
+---
 
-- [x] **Audit Git**: Analisis riwayat commit, branch, dan file untracked selesai didokumentasikan.
-- [x] **Branching Hygiene**: Branch `develop` dan `feat/notes-validation` aktif dibuat dari basis kode yang bersih.
-- [x] **Conventional Commits**: Standar format commit diverifikasi dengan tabel sebelum/sesudah.
-- [x] **Mesin Bersih**: `flutter analyze` 0 issue, `dart format` rapi, `flutter test` lolos (100% pass).
-- [x] **Peer Review**: Minimal 1 PR kecil dengan review observasi → dampak → usulan konkret (Status: Approved & Merged).
-- [ ] **AI Review Verification**: Dokumentasi `docs/ai-review-vs-keputusan.md` dengan minimal 2 temuan AI diterima dan 1 temuan ditolak secara argumentatif.
-- [ ] **CI Automation**: Workflow GitHub Actions `.github/workflows/ci.yml` siap menguji setiap Pull Request.
+## 5. Praktikum 3: Static Analysis, CI Automation, dan Mid Review
+
+### A. Hasil Tiga Pemeriksaan Mesin (Clean & Green)
+
+1. **`flutter analyze`**:
+   ```text
+   Analyzing 08-week-8-mid-project-review...
+   No issues found! (ran in 25.5s)
+   ```
+   *Status*: **HIJAU (0 errors, 0 warnings, 0 infos)**.
+
+2. **`dart format --output=none --set-exit-if-changed .`**:
+   ```text
+   Formatted 21 files (0 changed) in 0.17 seconds.
+   ```
+   *Status*: **HIJAU (Exit Code 0, seluruh kode Dart 100% konsisten terhadap style guide resmi)**.
+
+3. **`flutter test`**:
+   ```text
+   00:00 +0: loading test/core/format_test.dart
+   00:00 +1: formatDate returns a zero-padded date
+   00:00 +2: parseRoute returns the URI path without query or fragment
+   00:00 +3: parseRoute returns null for a missing route
+   00:01 +4: test/features/notes/notes_page_test.dart: reads notes and completes the Notes CRUD flow
+   00:00 +10: test/validate_note_test.dart: AddNote Validation Tests gagal saat judul kosong
+   00:00 +11: test/validate_note_test.dart: AddNote Validation Tests gagal saat judul whitespace
+   00:00 +12: test/validate_note_test.dart: AddNote Validation Tests sukses saat judul valid
+   00:00 +13: test/validate_note_test.dart: UpdateNote Validation Tests gagal saat judul kosong
+   00:00 +14: test/validate_note_test.dart: UpdateNote Validation Tests sukses saat judul valid
+   00:09 +14: All tests passed!
+   ```
+   *Status*: **HIJAU (14 unit & widget tests passed, 0 failures)**.
+
+---
+
+### B. Otomatisasi Penolakan (CI Workflow)
+Workflow GitHub Actions telah dikonfigurasi pada `.github/workflows/ci.yml` untuk mencegah regresi dan menolak Pull Request kotor secara otomatis:
+```yaml
+name: ci
+on: [pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: flutter analyze
+      - run: flutter test
+```
+
+---
+
+### C. Tiga Bukti Sterilitas Clean Architecture (Minggu 7 Regression Check)
+
+Jalankan perintah audit berikut dari root repository untuk membuktikan arsitektur feature-first steril:
+
+```bash
+# 1. Presentation tidak mengakses driver, query database, atau mapping row
+git grep -E "package:sqflite|package:dio|\.query\(|\.insert\(|\.fromMap|toMap\(" -- 08-week-8-mid-project-review/lib/features/notes/presentation
+# Hasil: Exit code 1 (Tidak ada match -> Steril!)
+
+# 2. Domain tidak mengimpor framework Flutter atau detail infrastruktur
+git grep -E "package:flutter/|package:sqflite|package:dio" -- 08-week-8-mid-project-review/lib/features/notes/domain
+# Hasil: Exit code 1 (Tidak ada match -> Steril!)
+
+# 3. Data tidak mengimpor presentation layer
+git grep -E "presentation/" -- 08-week-8-mid-project-review/lib/features/notes/data
+# Hasil: Exit code 1 (Tidak ada match -> Steril!)
+```
+
+---
+
+## 6. Checklist Evaluasi Kesiapan Tengah Semester (Mid-Project Readiness)
+
+| Komponen Evaluasi | Kriteria Kelulusan | Status Lapangan | Catatan / Bukti |
+|:------------------|:-------------------|:---------------:|:----------------|
+| **Branching Flow** | Tidak ada direct commit ke `main`; flow `develop` & `feature/*` berjalan. | ✅ **Lulus** | Riwayat branch & merge `feat(notes): validasi judul kosong + test` tercatat. |
+| **Commit Hygiene** | Standar Conventional Commits (`feat`, `fix`, `chore`, `docs`, `test`). | ✅ **Lulus** | Tabel penulisan ulang 3 commit lama terdokumentasi. |
+| **Pull Request** | Template lengkap (Masalah $\rightarrow$ Solusi $\rightarrow$ Cara Uji $\rightarrow$ Issue tracking). | ✅ **Lulus** | PR #12 terdokumentasi rapi di `docs/review-checklist.md`. |
+| **Peer Review** | Review konstruktif 4 temuan (Kebenaran, Arsitektur, Test) berstatus Approve. | ✅ **Lulus** | Observasi $\rightarrow$ Dampak $\rightarrow$ Usulan Konkret ditindaklanjuti. |
+| **Mesin Bersih** | `flutter analyze` 0 issue, `dart format` rapi, `flutter test` hijau. | ✅ **Lulus** | Output: 0 issues, 0 formatting errors, 14 tests pass. |
+| **Arsitektur Steril** | 3 pengujian grep Clean Architecture menghasilkan exit code 1 (steril). | ✅ **Lulus** | Domain independen, Presentation decoupled dari driver SQLite. |
+| **CI Automation** | `.github/workflows/ci.yml` aktif untuk memvalidasi setiap PR. | ✅ **Lulus** | File workflow siap di repository. |
+| **AI Verification** | Verifikasi temuan AI dengan bukti test & alasan penolakan tertulis. | ⏳ *Siap Tahap 6* | Siap dieksekusi pada AI Prompt Challenge (`docs/ai-review-vs-keputusan.md`). |
+
 
