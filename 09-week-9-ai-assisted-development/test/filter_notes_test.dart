@@ -51,5 +51,12 @@ void main() {
       expect(result, hasLength(1));
       expect(result.first.title, 'Kuliah Pemrograman Mobile');
     });
+
+    test('mempertahankan urutan catatan setelah difilter', () {
+      final result = filterNotes(sampleNotes, 'belanja');
+      expect(result.first.id, 1);
+      expect(result.last.id, 2);
+      expect(result.first.updatedAt.isBefore(result.last.updatedAt), isTrue);
+    });
   });
 }
