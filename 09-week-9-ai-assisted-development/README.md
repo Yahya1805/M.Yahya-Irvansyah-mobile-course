@@ -27,7 +27,12 @@ Fitur pencarian diintegrasikan dengan mematuhi prinsip *Feature-First Clean Arch
 09-week-9-ai-assisted-development/
 ├── docs/
 │   ├── ai-log.md                       # Logbook Prompt 5 Slot, Halusinasi AI, & Bukti Uji
-│   └── ai-challenge.md                 # Evaluasi Kritis AI Code Reviewer vs Developer
+│   ├── ai-challenge.md                 # Evaluasi Kritis AI Code Reviewer vs Developer
+│   └── refleksi.md                     # Lembar Refleksi Pembelajaran Week 9
+├── screenshots/
+│   ├── notes-list.png                  # Tampilan daftar catatan
+│   ├── notes-dialog.png                # Dialog tambah & edit catatan
+│   └── notes-before.png                # State awal catatan
 ├── lib/
 │   ├── core/
 │   │   ├── database/notes_db.dart
@@ -146,6 +151,44 @@ Pengujian manual pada aplikasi dapat diverifikasi dengan 3 skenario query pencar
 3. **Query Kosong / Reset**:
    * *Input*: Kosongkan teks atau tekan tombol icon `clear` (`X`).
    * *Ekspektasi*: Seluruh daftar catatan kembali muncul secara lengkap.
+
+---
+
+## 📸 Dokumentasi Antarmuka (Screenshots)
+
+| Layar Awal Catatan | Form Tambah / Edit Catatan | Daftar Catatan Terkini |
+| :---: | :---: | :---: |
+| ![Notes Before](screenshots/notes-before.png) | ![Notes Dialog](screenshots/notes-dialog.png) | ![Notes List](screenshots/notes-list.png) |
+
+---
+
+## 💡 Refleksi Pembelajaran (Week 9)
+
+### 1. Satu halusinasi AI apa yang Anda temukan dan bagaimana membuktikannya?
+* **Halusinasi API Kadaluarsa**: AI mengusulkan pembuatan provider query menggunakan `StateProvider<String>((ref) => '')`.
+* **Cara Membuktikannya**: Pada proyek ini, dependensi yang digunakan adalah `flutter_riverpod: ^3.4.3`. Pada Riverpod 3.x, `StateProvider` telah dihapus. Ketika kode AI diuji dengan `flutter test`, Dart compiler langsung melempar error kompilasi:
+  ```text
+  Error: Method not found: 'StateProvider'.
+  final noteSearchQueryProvider = StateProvider<String>((ref) => '');
+  ```
+  Hal ini membuktikan halusinasi versi dependensi. Solusinya direfaktor ke `Notifier<String>` dan `NotifierProvider`.
+
+### 2. Prompt mana yang paling membantu dan apa yang Anda ubah?
+* **Prompt Paling Membantu**: Prompt berformat **Formula 5 Slot** dengan penegasan batasan teknis (*negative constraints*).
+* **Yang Diubah dari Prompt Biasa**: Alih-alih hanya meminta *"buatkan search notes"*, prompt dilengkapi dengan:
+  * Batasan arsitektur: `feature-first (presentation -> domain <- data)`.
+  * Larangan keras: *"Jangan panggil SQLite langsung dari widget"* dan *"Domain harus murni Dart tanpa import Flutter/UI"*.
+  * Batasan ukuran: *"Maksimal 80 baris kode"*.
+  Perubahan ini secara drastis menyaring kode yang dihasilkan AI sehingga tidak merusak arsitektur yang sudah ada.
+
+### 3. Satu refactor apa yang Anda lakukan pada kode AI?
+* **Refactoring Dekomposisi Widget & Isolasi Domain**:
+  1. Memindahkan logika fungsi `filterNotes` dari widget presentasi ke Domain Use Case murni Dart di `lib/features/notes/domain/usecases/filter_notes.dart` agar bisa diuji secara murni *headless unit test*.
+  2. Memecah method render raksasa `NotesPage.build` yang berukuran lebih dari 75 baris menjadi sub-widget modular di bawah 40 baris (`_SearchBar`, `_EmptySearchState`, `_ErrorState`, `_DeleteConfirmDialog`).
+
+### 4. Keputusan terima/tolak mana yang paling sulit?
+* **Keputusan Paling Menantang**: Menolak usulan AI yang menuntut delegasi filter ke query database SQL `LIKE '%query%'` langsung.
+* **Alasan Menolak**: Argumen AI mengenai skalabilitas data puluhan ribu terdengar masuk akal pada awalnya. Namun secara teknis, usulan tersebut adalah *premature optimization* yang melanggar *Clean Architecture Dependency Rule* (karena AI ingin memanggil raw query dari layer UI/domain). Untuk aplikasi catatan lokal mahasiswa (< 1.000 data), pemrosesan *in-memory* murni Dart berlangsung instan (< 1ms), tidak membebani I/O disk lokal, serta menjamin kode tetap deterministik dan mudah diuji.
 
 ---
 
