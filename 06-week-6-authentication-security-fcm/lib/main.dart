@@ -65,11 +65,13 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    listenForeground(router.go);
+    if (Firebase.apps.isNotEmpty) {
+      listenForeground(router.go);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(handleTerminated(router.go));
-    });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(handleTerminated(router.go));
+      });
+    }
   }
 
   @override
