@@ -1,0 +1,19 @@
+# Build and system logs
+*.log
+hs_err_pid*
+replay_pid*
+
+# Flutter and Dart build artifacts
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+**/build/
+**/android/build/
+**/ios/Pods/
+.pub-cache/
+.pub/
+
+# IDE files
+.idea/
+*.iml
+.DS_Store

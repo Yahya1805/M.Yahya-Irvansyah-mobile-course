@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:week5_offline_notes/data/local/db.dart';
 
 import '../../data/repositories/note_repository_impl.dart';
