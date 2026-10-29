@@ -10,15 +10,15 @@ class NotesPage extends ConsumerWidget {
   const NotesPage({super.key});
 
   Future<void> _addNote(BuildContext context, WidgetRef ref) async {
-    final noteInput = await showDialog<({String title, String body})>(
+    final input = await showDialog<({String title, String body})>(
       context: context,
       builder: (context) => const _NoteDialog(),
     );
-    if (noteInput == null || !context.mounted) return;
+    if (input == null || !context.mounted) return;
 
     final result = await ref
         .read(addNoteProvider)
-        .call(title: noteInput.title, body: noteInput.body);
+        .call(title: input.title, body: input.body);
     if (!context.mounted) return;
 
     if (result.failure != null) {
@@ -26,7 +26,6 @@ class NotesPage extends ConsumerWidget {
           .showSnackBar(SnackBar(content: Text(result.failure!.message)));
       return;
     }
-
     ref.invalidate(notesProvider);
   }
 
@@ -36,10 +35,12 @@ class NotesPage extends ConsumerWidget {
       builder: (context) => _NoteDialog(note: note),
     );
     if (input == null || !context.mounted || note.id == null) return;
+
     final failure = await ref
         .read(updateNoteProvider)
         .call(id: note.id!, title: input.title, body: input.body);
     if (!context.mounted) return;
+
     if (failure != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(failure.message)));
@@ -56,24 +57,13 @@ class NotesPage extends ConsumerWidget {
     if (note.id == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Hapus catatan?'),
-        content: Text('Catatan "${note.title}" akan dihapus.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
+      builder: (context) => _DeleteConfirmDialog(title: note.title),
     );
     if (confirmed != true || !context.mounted) return;
+
     final failure = await ref.read(deleteNoteProvider).call(note.id!);
     if (!context.mounted) return;
+
     if (failure != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(failure.message)));
@@ -92,81 +82,23 @@ class NotesPage extends ConsumerWidget {
       appBar: AppBar(title: const Text('Catatan')),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error is Failure
-                    ? error.message
-                    : 'Gagal memuat catatan. Silakan coba lagi.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => ref.invalidate(notesProvider),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Coba lagi'),
-              ),
-            ],
-          ),
+        error: (err, _) => _ErrorState(
+          message: err is Failure
+              ? err.message
+              : 'Gagal memuat catatan. Silakan coba lagi.',
+          onRetry: () => ref.invalidate(notesProvider),
         ),
         data: (notes) {
           if (notes.isEmpty) {
             return const Center(child: Text('Belum ada catatan.'));
           }
-
           final filteredNotes = filteredState.value ?? notes;
-
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: TextField(
-                  key: const Key('searchNotesField'),
-                  decoration: InputDecoration(
-                    hintText: 'Cari catatan...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: query.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              ref
-                                  .read(noteSearchQueryProvider.notifier)
-                                  .clear();
-                            },
-                          )
-                        : null,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onChanged: (val) {
-                    ref.read(noteSearchQueryProvider.notifier).setQuery(val);
-                  },
-                ),
-              ),
+              _SearchBar(query: query),
               Expanded(
                 child: filteredNotes.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.search_off,
-                              size: 56,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tidak ada catatan yang cocok dengan "$query"',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
+                    ? _EmptySearchState(query: query)
                     : _NotesList(
                         filteredNotes,
                         onEdit: (note) => _editNote(context, ref, note),
@@ -182,6 +114,107 @@ class NotesPage extends ConsumerWidget {
         tooltip: 'Tambah catatan',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class _SearchBar extends ConsumerWidget {
+  const _SearchBar({required this.query});
+  final String query;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: TextField(
+        key: const Key('searchNotesField'),
+        decoration: InputDecoration(
+          hintText: 'Cari catatan...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: query.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    ref.read(noteSearchQueryProvider.notifier).clear();
+                  },
+                )
+              : null,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        onChanged: (val) {
+          ref.read(noteSearchQueryProvider.notifier).setQuery(val);
+        },
+      ),
+    );
+  }
+}
+
+class _EmptySearchState extends StatelessWidget {
+  const _EmptySearchState({required this.query});
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.search_off, size: 56, color: Colors.grey),
+          const SizedBox(height: 8),
+          Text(
+            'Tidak ada catatan yang cocok dengan "$query"',
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Coba lagi'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeleteConfirmDialog extends StatelessWidget {
+  const _DeleteConfirmDialog({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Hapus catatan?'),
+      content: Text('Catatan "$title" akan dihapus.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Hapus'),
+        ),
+      ],
     );
   }
 }
