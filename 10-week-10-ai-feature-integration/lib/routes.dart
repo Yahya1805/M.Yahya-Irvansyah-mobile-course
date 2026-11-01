@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'core/format.dart';
 import 'features/notes/presentation/pages/notes_page.dart';
 import 'features/chat_screen.dart';
+import 'features/multimodal_ai_screen.dart';
 
 const notesRoute = '/notes';
 const aiChatRoute = '/ai-chat';
+const aiMultimodalRoute = '/ai-multimodal';
 
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final route = parseRoute(settings.name);
@@ -19,6 +21,12 @@ Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     return MaterialPageRoute<void>(
       settings: settings,
       builder: (context) => const ChatScreen(),
+    );
+  }
+  if (route == aiMultimodalRoute) {
+    return MaterialPageRoute<void>(
+      settings: settings,
+      builder: (context) => const MultimodalAiScreen(),
     );
   }
   return null;
