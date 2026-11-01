@@ -18,7 +18,16 @@ class MyApp extends StatelessWidget {
           actions: [
             Builder(
               builder: (context) => IconButton(
-                tooltip: 'AI Assistant',
+                tooltip: 'AI Multimodal (OCR, Vision, STT)',
+                icon: const Icon(Icons.document_scanner),
+                onPressed: () {
+                  Navigator.of(context).pushNamed(aiMultimodalRoute);
+                },
+              ),
+            ),
+            Builder(
+              builder: (context) => IconButton(
+                tooltip: 'AI Chat Assistant',
                 icon: const Icon(Icons.auto_awesome),
                 onPressed: () {
                   Navigator.of(context).pushNamed(aiChatRoute);
