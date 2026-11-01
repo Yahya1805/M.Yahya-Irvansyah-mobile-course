@@ -9,11 +9,13 @@ class ChatMessage {
     required this.text,
     required this.isUser,
     required this.timestamp,
+    this.isFallback = false,
   });
 
   final String text;
   final bool isUser;
   final DateTime timestamp;
+  final bool isFallback;
 }
 
 class ChatScreen extends StatefulWidget {
@@ -85,16 +87,20 @@ class _ChatScreenState extends State<ChatScreen> {
           _scrollToBottom();
         },
         onError: (Object error) {
-          _handleError(error);
+          _handleErrorWithFallback(error, text);
         },
         onDone: () {
           if (_streamingAiText != null && _streamingAiText!.isNotEmpty) {
+            final isOfflineFallback =
+                _streamingAiText!.contains('Mode Offline') ||
+                _streamingAiText!.contains('Layanan AI sedang sibuk');
             setState(() {
               _messages.add(
                 ChatMessage(
                   text: _streamingAiText!,
                   isUser: false,
                   timestamp: DateTime.now(),
+                  isFallback: isOfflineFallback,
                 ),
               );
               _streamingAiText = null;
@@ -106,27 +112,56 @@ class _ChatScreenState extends State<ChatScreen> {
         cancelOnError: true,
       );
     } catch (e) {
-      _handleError(e);
+      _handleErrorWithFallback(e, text);
     }
   }
 
-  void _handleError(Object error) {
+  void _handleErrorWithFallback(Object error, String originalQuestion) {
     setState(() {
       _isLoading = false;
       _streamingAiText = null;
     });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Error AI: ${error.toString().replaceAll('Exception: ', '')}',
+
+    final errorMsg = error.toString().replaceAll('Exception: ', '');
+
+    // Fallback Dialog jika Layanan AI Sibuk / Kuota Tercapai / Down
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.cloud_off, color: Colors.orange.shade800),
+            const SizedBox(width: 8),
+            const Text('Layanan AI Sibuk'),
+          ],
         ),
-        backgroundColor: Colors.red.shade700,
-        action: SnackBarAction(
-          label: 'Atur API Key',
-          textColor: Colors.white,
-          onPressed: _showApiKeyDialog,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(errorMsg),
+            const SizedBox(height: 12),
+            const Text(
+              'Sistem telah mengaktifkan mode offline lokal atau Anda dapat mencoba lagi beberapa saat lagi.',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tutup'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _inputController.text = originalQuestion;
+              _sendMessage();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Coba Lagi'),
+          ),
+        ],
       ),
     );
   }
@@ -224,7 +259,18 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.isUser;
+    final isFallback = message.isFallback;
     final theme = Theme.of(context);
+
+    Color bgColor;
+    if (isUser) {
+      bgColor = theme.colorScheme.primary;
+    } else if (isFallback) {
+      bgColor = Colors.amber.shade100;
+    } else {
+      bgColor = theme.colorScheme.surfaceContainerHighest;
+    }
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -234,21 +280,49 @@ class _MessageBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser
-              ? theme.colorScheme.primary
-              : theme.colorScheme.surfaceContainerHighest,
+          color: bgColor,
           borderRadius: BorderRadius.circular(16).copyWith(
             bottomRight: isUser ? const Radius.circular(0) : null,
             bottomLeft: !isUser ? const Radius.circular(0) : null,
           ),
+          border: isFallback ? Border.all(color: Colors.amber.shade400) : null,
         ),
-        child: Text(
-          message.text,
-          style: TextStyle(
-            color: isUser
-                ? theme.colorScheme.onPrimary
-                : theme.colorScheme.onSurface,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isFallback) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.offline_bolt,
+                    size: 14,
+                    color: Colors.amber.shade900,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Offline Fallback',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            Text(
+              message.text,
+              style: TextStyle(
+                color: isUser
+                    ? theme.colorScheme.onPrimary
+                    : (isFallback
+                          ? Colors.brown.shade900
+                          : theme.colorScheme.onSurface),
+              ),
+            ),
+          ],
         ),
       ),
     );
