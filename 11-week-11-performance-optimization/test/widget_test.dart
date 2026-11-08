@@ -19,6 +19,7 @@ void main() {
     expect(find.text('Profil Mahasiswa'), findsOneWidget);
     expect(find.text('M.Yahya Irvansyah'), findsOneWidget);
     expect(find.byTooltip('Catatan'), findsOneWidget);
+    expect(find.byTooltip('Galeri Gambar'), findsOneWidget);
   });
 
   testWidgets('Notes button opens the Notes page', (WidgetTester tester) async {

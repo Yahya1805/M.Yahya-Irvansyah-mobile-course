@@ -87,7 +87,32 @@ class _NotesListPanel extends ConsumerStatefulWidget {
 }
 
 class _NotesListPanelState extends ConsumerState<_NotesListPanel> {
+  final ScrollController _scrollController = ScrollController();
   bool _requestedNextPage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  /// Infinite scroll: muat halaman berikutnya saat pengguna berada ~200 px
+  /// dari dasar list, bukan menunggu item terakhir benar-benar terlihat.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      _requestNextPage();
+    }
+  }
 
   Future<void> _loadMore() async {
     try {
@@ -177,12 +202,15 @@ class _NotesListPanelState extends ConsumerState<_NotesListPanel> {
     }
 
     return ListView.builder(
+      controller: _scrollController,
       itemCount: notes.length + (hasMore ? 1 : 0),
       // Keep-alive tidak diperlukan untuk daftar pendek; mematikan fitur ini
       // mengurangi jumlah widget yang disimpan di memori saat scroll.
       addAutomaticKeepAlives: false,
       itemBuilder: (context, index) {
         if (index >= notes.length) {
+          // Fallback untuk layar tinggi: jika isi belum memenuhi viewport,
+          // listener scroll tidak akan pernah terpicu.
           _requestNextPage();
           return const _LoadMoreIndicator();
         }

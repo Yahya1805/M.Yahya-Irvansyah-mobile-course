@@ -5,11 +5,13 @@ import 'core/format.dart';
 import 'core/providers.dart';
 import 'features/notes/presentation/pages/notes_page.dart';
 import 'features/chat_screen.dart';
+import 'features/gallery/gallery_screen.dart';
 import 'features/multimodal_ai_screen.dart';
 
 const notesRoute = '/notes';
 const aiChatRoute = '/ai-chat';
 const aiMultimodalRoute = '/ai-multimodal';
+const galleryRoute = '/gallery';
 
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final route = parseRoute(settings.name);
@@ -37,6 +39,12 @@ Route<dynamic>? onGenerateRoute(RouteSettings settings) {
           return MultimodalAiScreen(aiService: ref.watch(aiServiceProvider));
         },
       ),
+    );
+  }
+  if (route == galleryRoute) {
+    return MaterialPageRoute<void>(
+      settings: settings,
+      builder: (context) => const GalleryScreen(),
     );
   }
   return null;
