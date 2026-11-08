@@ -7,11 +7,13 @@ import 'features/notes/presentation/pages/notes_page.dart';
 import 'features/chat_screen.dart';
 import 'features/gallery/gallery_screen.dart';
 import 'features/multimodal_ai_screen.dart';
+import 'features/posts/presentation/pages/posts_page.dart';
 
 const notesRoute = '/notes';
 const aiChatRoute = '/ai-chat';
 const aiMultimodalRoute = '/ai-multimodal';
 const galleryRoute = '/gallery';
+const postsRoute = '/posts';
 
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final route = parseRoute(settings.name);
@@ -45,6 +47,12 @@ Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     return MaterialPageRoute<void>(
       settings: settings,
       builder: (context) => const GalleryScreen(),
+    );
+  }
+  if (route == postsRoute) {
+    return MaterialPageRoute<void>(
+      settings: settings,
+      builder: (context) => const PostsPage(),
     );
   }
   return null;

@@ -28,6 +28,13 @@ Dokumen ini mencatat **hipotesis**, **perubahan kode**, dan **cara pengukuran** 
 | 13 | Cache disk + placeholder gambar | Selesai | Lulus | Belum |
 | 14 | Decode thumbnail (`memCacheWidth`) | Selesai | Lulus | Belum |
 | 15 | Batas `imageCache` + precache | Selesai | Lulus | Belum |
+| 16 | Dio client bersama + timeout + gzip | Selesai | Lulus | Belum |
+| 17 | Retry interceptor 408/429/5xx/timeout | Selesai | Lulus | Belum |
+| 18 | Cache SQLite + metadata (DB v4) | Selesai | Lulus | Belum |
+| 19 | Empat strategi cache repository | Selesai | Lulus | Belum |
+| 20 | Stale-while-revalidate | Selesai | Lulus | Belum |
+| 21 | ETag / `If-None-Match` (304) | Selesai | Lulus | Belum |
+| 22 | Payload kecil (`_limit=30`) | Selesai | Lulus | Belum |
 
 ---
 
@@ -353,6 +360,162 @@ Dokumen ini mencatat **hipotesis**, **perubahan kode**, dan **cara pengukuran** 
 1. Buka Galeri dan scroll sampai 60 gambar.
 2. Catat `imageCache.currentSizeBytes` dan puncak memori.
 3. Bandingkan waktu tampil tile antara precache aktif dan nonaktif.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 16. Dio client bersama + timeout + gzip
+
+**Hipotesis:** membuat `Dio` baru per request membuang connection pool dan interceptor. Timeout eksplisit mencegah request menggantung; `Accept-Encoding: gzip` memperkecil payload bila server mendukung.
+
+**Perubahan:**
+- `apiClientProvider` menyimpan satu `Dio` dan menutupnya saat provider di-dispose.
+- `connectTimeout` 10 s, `receiveTimeout` 15 s, `sendTimeout` 10 s.
+- Header `Accept-Encoding: gzip` dan logging ringkas di mode debug.
+
+**Cara ukur:**
+1. Buka Postingan dalam mode profile dengan DevTools → Network.
+2. Catat ukuran transfer respons dan header `Content-Encoding`.
+3. Bandingkan jumlah koneksi/request saat halaman dibuka berulang.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 17. Retry interceptor 408/429/5xx/timeout
+
+**Hipotesis:** kegagalan sementara tidak perlu langsung ditampilkan sebagai error. Retry berjeda memberi kesempatan jaringan pulih tanpa membanjiri server.
+
+**Perubahan:**
+- `RetryInterceptor` dengan maksimal 3 percobaan dan jeda 1 s / 2 s / 5 s.
+- Retry hanya untuk timeout, gagal koneksi, HTTP 408, 429, dan 5xx.
+- Error 4xx lain langsung diteruskan.
+
+**Cara ukur:**
+1. Aktifkan mode pesawat sesaat atau gunakan proxy yang mengembalikan 500.
+2. Catat jumlah percobaan dan waktu sampai error/berhasil.
+3. Pastikan tidak ada retry untuk 404.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 18. Cache SQLite + metadata (DB v4)
+
+**Hipotesis:** feed yang dibuka berulang tidak perlu selalu menunggu jaringan bila data terakhir tersedia di disk.
+
+**Perubahan:**
+- `SqflitePostsCacheStore` menulis payload JSON ke `cached_posts`.
+- Tabel `posts_cache_meta` menyimpan `etag` dan `last_synced_at`.
+- Database naik ke versi 4 dengan migrasi `CREATE TABLE IF NOT EXISTS`.
+
+**Cara ukur:**
+1. Muat Postingan sekali saat online.
+2. Tutup dan buka kembali halaman; catat waktu sampai item pertama tampil.
+3. Bandingkan dengan kondisi cache kosong.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 19. Empat strategi cache repository
+
+**Hipotesis:** setiap jenis data butuh trade-off berbeda antara kesegaran dan kecepatan. Repository perlu menyediakan cache-first, network-first, stale-while-revalidate, dan cache-only.
+
+**Perubahan:**
+- `PostsRepositoryImpl.loadPosts(policy: ...)` menangani keempat strategi.
+- Cache-first tidak menyentuh API bila cache ada.
+- Network-first memakai cache sebagai fallback saat API gagal.
+- Cache-only tidak melakukan request jaringan.
+
+**Cara ukur:**
+1. Buka Postingan dan ganti strategi melalui dropdown.
+2. Di DevTools → Network, catat kapan request terjadi.
+3. Matikan jaringan dan bandingkan perilaku tiap strategi.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 20. Stale-while-revalidate
+
+**Hipotesis:** menampilkan cache lebih dulu membuat konten terlihat segera, sementara revalidasi latar belakang menjaga data tetap segar.
+
+**Perubahan:**
+- Policy SWR memanggil `onCache` dengan data cache sebelum request jaringan.
+- `PostsNotifier` menampilkan cache dengan indikator refresh, lalu mengganti state saat data segar tiba.
+- Bila revalidasi gagal, cache tetap tampil dengan pesan fallback.
+
+**Cara ukur:**
+1. Pastikan cache sudah terisi, lalu buka Postingan dengan policy SWR.
+2. Catat waktu item pertama muncul dan waktu data segar menggantikan cache.
+3. Amati apakah ada layar kosong/loading penuh.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 21. ETag / `If-None-Match` (304)
+
+**Hipotesis:** bila data tidak berubah, mengunduh ulang body hanya membuang bandwidth. ETag memungkinkan server menjawab 304 tanpa body.
+
+**Perubahan:**
+- ETag cache dikirim sebagai `If-None-Match` bersama `Cache-Control: no-cache`.
+- Respons 304 memakai isi cache dan hanya memperbarui `last_synced_at`.
+- UI menampilkan badge `304 · tidak berubah`.
+
+**Cara ukur:**
+1. Muat Postingan sekali, lalu tekan refresh.
+2. Di DevTools → Network, catat status (200/304) dan ukuran transfer.
+3. Bandingkan ukuran body 200 vs 304.
+4. Uji manual: JSONPlaceholder mengirim `ETag` dan membalas 304 untuk `If-None-Match` yang sama.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 22. Payload kecil (`_limit=30`)
+
+**Hipotesis:** meminta sebagian data mengurangi ukuran respons, waktu parsing, dan memori daftar.
+
+**Perubahan:**
+- Request memakai query `_limit=30`.
+- Hanya field yang dibutuhkan (`id`, `userId`, `title`, `body`) yang dipetakan ke entity.
+- Pemilihan field di server (`?fields=...`) tidak dipaksakan karena JSONPlaceholder tidak mendukungnya.
+
+**Cara ukur:**
+1. Bandingkan ukuran respons `_limit=30` dengan tanpa `_limit` di DevTools → Network.
+2. Catat waktu parsing dan jumlah item yang dibangun.
+3. Pastikan daftar tetap memakai `ListView.builder`.
 
 **Hasil baseline:** _belum diukur_
 
