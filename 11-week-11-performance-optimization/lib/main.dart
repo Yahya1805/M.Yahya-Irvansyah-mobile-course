@@ -3,7 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'routes.dart';
 
-void main() => runApp(const ProviderScope(child: MyApp()));
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Batasi cache gambar di memori. Tanpa batas, membuka banyak gambar
+  // beresolusi tinggi dapat menghabiskan memori perangkat.
+  PaintingBinding.instance.imageCache
+    ..maximumSize = 200
+    ..maximumSizeBytes = 80 << 20; // 80 MB
+  runApp(const ProviderScope(child: MyApp()));
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -27,6 +35,11 @@ class MyApp extends StatelessWidget {
               tooltip: 'AI Chat Assistant',
               icon: Icons.auto_awesome,
               route: aiChatRoute,
+            ),
+            _ProfileActionButton(
+              tooltip: 'Galeri Gambar',
+              icon: Icons.photo_library_outlined,
+              route: galleryRoute,
             ),
             _ProfileActionButton(
               tooltip: 'Catatan',

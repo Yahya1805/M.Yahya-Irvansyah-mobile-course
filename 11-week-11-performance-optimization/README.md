@@ -13,6 +13,7 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 * **Branch**:
   * `feat/performance-optimization` — pagination, streaming, cache, gambar
   * `feat/widget-rebuild-optimization` — pengurangan widget rebuild (bagian 4)
+  * `feat/lazy-loading-image-optimization` — infinite scroll & optimasi gambar tampilan (bagian 5)
 * **Baseline**: project Week 10 (`10-week-10-ai-feature-integration`)
 * **Status mesin**:
   * `dart analyze`: **0 issue (Clean)**
@@ -29,6 +30,8 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 | Pencarian catatan | Setiap ketikan langsung memicu query dan rebuild halaman | Tidak ada debounce; state halaman berada di widget yang sama dengan AppBar/FAB |
 | Streaming chat | Bubble chat dan seluruh halaman ikut di-render ulang untuk setiap potongan kata | State streaming disimpan di `setState()` halaman |
 | Widget rebuild | AppBar, tombol, dan item list ikut dibangun ulang saat state kecil berubah | Closure baru di build, widget tidak `const`, listener provider terlalu lebar |
+| Lazy loading | Semua item berpotensi dibangun sekaligus saat daftar dibuka | Belum ada infinite scroll berbasis posisi scroll |
+| Gambar tampilan | Gambar 800×600 di-decode penuh untuk tile kecil, diunduh ulang setiap dibuka | Belum ada thumbnail decode, cache disk, placeholder, dan batas image cache |
 | Cache AI | Cache hilang setiap aplikasi ditutup; ukuran cache tidak dibatasi | Cache hanya berupa `static Map` tanpa eviction dan tanpa penyimpanan persisten |
 | Gambar multimodal | Byte gambar kamera dikirim mentah sebagai base64 | Belum ada resize/kompresi sebelum encoding |
 
@@ -42,7 +45,7 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 * Query memakai `LIMIT/OFFSET` dan `title LIKE ?` sehingga database hanya mengembalikan baris yang dibutuhkan.
 * Database naik ke versi 3 dan menambahkan index `idx_notes_updated_at` pada `notes(updated_at DESC)`.
 * `NotesListNotifier` memuat **20 catatan per halaman** dan menyediakan `loadMore()`.
-* Halaman berikutnya diminta otomatis saat item terakhir list terbangun.
+* Halaman berikutnya diminta otomatis saat pengguna berada **≤200 px** dari dasar list melalui `ScrollController`; footer item tetap menjadi fallback untuk layar tinggi yang isinya belum memenuhi viewport.
 * `ListView.builder` memakai `addAutomaticKeepAlives: false` agar widget di luar layar tidak disimpan lebih lama dari necessary.
 
 **Dampak yang diharapkan:** waktu buka halaman dan memori turun sebanding dengan jumlah catatan, bukan bertambah linear terhadap seluruh isi database.
@@ -92,6 +95,26 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
   * MIME type ikut disesuaikan (`image/jpeg` setelah konversi).
 * Dipakai oleh `recognizeText()` (OCR) dan `describeImage()` (Vision).
 
+### 7. Lazy loading & infinite scroll
+
+* Daftar catatan memakai `ScrollController` dan memuat halaman berikutnya saat posisi scroll berada 200 px dari dasar.
+* `GridView.builder` pada galeri hanya membangun tile yang terlihat; tidak ada `Expanded`/`Flexible` di dalam item.
+* Item list diekstrak menjadi widget sendiri (`_NoteListItem`, `_GalleryTile`) dan memakai constructor `const` bila memungkinkan.
+* `GalleryPager` memisahkan logika pagination murni (20 item/halaman, maksimal 60) agar mudah diuji tanpa network.
+* Flag `_isLoading`/`hasMore` mencegah request halaman ganda saat pengguna scroll cepat.
+
+### 8. Optimasi gambar tampilan (galeri)
+
+* **Cache lokal:** `CachedNetworkImage` menyimpan gambar di disk sehingga tidak diunduh ulang saat halaman dibuka kembali.
+* **Decode sesuai ukuran tampil:** `memCacheWidth: 300` dan `memCacheHeight: 225` untuk tile 2 kolom, plus batas disk cache 600×450.
+* **Format/ukuran sumber:** URL meminta gambar 800×600 (bukan full-res) dan server picsum mengirim sesuai seed.
+* **Placeholder + fade-in:** tile menampilkan indikator abu-abu lalu fade 200 ms saat gambar siap.
+* **Error handling:** `errorWidget` menampilkan ikon gambar rusak, bukan layar kosong.
+* **Precache:** 4 thumbnail halaman berikutnya dimuat lebih awal memakai `precacheImage` setelah frame selesai.
+* **Batas image cache:** `PaintingBinding.instance.imageCache` dibatasi 200 gambar / 80 MB di `main.dart`.
+
+> Galeri membutuhkan koneksi internet. Di widget test, gambar jaringan tidak diunduh; yang diuji adalah struktur lazy grid dan logika pagination.
+
 ---
 
 ## 🧪 Bukti Pengujian Otomatis
@@ -99,6 +122,9 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 | Berkas | Cakupan |
 | :--- | :--- |
 | `test/features/notes/notes_pagination_test.dart` | Halaman pertama 20 item, `loadMore` menambah sampai 25, pencarian hanya memuat hasil yang cocok |
+| `test/features/notes/notes_infinite_scroll_test.dart` | Fling mendekati dasar list meminta halaman berikutnya pada offset 20 |
+| `test/features/gallery/gallery_pager_test.dart` | Pagination 20 item/halaman, batas 60, halaman terakhir mengikuti sisa item |
+| `test/features/gallery/gallery_screen_test.dart` | Galeri memakai `GridView.builder` dan `CachedNetworkImage` |
 | `test/performance_optimization_test.dart` | Gambar 1600×1200 diperkecil ≤400 px dan menjadi JPEG; jawaban AI tetap terbaca dari cache persisten pada instance `AiService` baru |
 | `test/search_filter_test.dart` | Debounce 300 ms dan empty state pencarian |
 | `test/chat_screen_test.dart` | Empty state, bubble streaming, dialog fallback error |
@@ -111,7 +137,7 @@ Menjalankan seluruh test:
 flutter test
 ```
 
-Hasil terakhir: **36 test lulus**.
+Hasil terakhir: **41 test lulus**.
 
 ---
 
@@ -129,11 +155,13 @@ Pengukuran dilakukan pada **emulator/perangkat Android** (bukan Windows desktop,
    * scroll sampai memicu `loadMore`;
    * ketik kata kunci di search bar dan berhenti mengetik;
    * buka AI Chat dan kirim satu pertanyaan sampai streaming selesai;
-   * buka AI Multimodal lalu jalankan OCR pada gambar besar.
+   * buka AI Multimodal lalu jalankan OCR pada gambar besar;
+   * buka Galeri, scroll beberapa halaman, lalu ukur waktu decode dan pemakaian memori gambar.
 4. Catat pada `docs/perf-log.md`:
    * jumlah frame yang melewati budget 16 ms;
    * puncak memori (DevTools → Memory);
    * ukuran payload gambar sebelum/sesudah kompresi (DevTools → Network atau log `bytes.length`);
+   * ukuran gambar yang diunduh vs thumbnail yang di-decode (DevTools → Network);
    * jumlah rebuild (DevTools → Widget Inspector / `debugPrintRebuildDirtyWidgets`).
 5. Untuk membandingkan dengan baseline, jalankan project `10-week-10-ai-feature-integration` pada perangkat yang sama dengan skenario identik.
 
@@ -157,12 +185,16 @@ Pengukuran dilakukan pada **emulator/perangkat Android** (bukan Windows desktop,
 │   │   └── providers.dart              # aiServiceProvider (shared instance)
 │   ├── features/
 │   │   ├── notes/                      # Pagination, debounce, select, item terpisah
+│   │   ├── gallery/                    # Galeri lazy grid + cached_network_image
 │   │   ├── chat_screen.dart            # ValueNotifier + throttle + RepaintBoundary
 │   │   └── multimodal_ai_screen.dart   # Tab diekstrak + RepaintBoundary hasil AI
-│   ├── main.dart                       # Aksi AppBar const tanpa Builder/closure
-│   └── routes.dart                     # Inject aiServiceProvider ke layar AI
+│   ├── main.dart                       # Aksi AppBar const + batas image cache
+│   └── routes.dart                     # Inject aiServiceProvider + route galeri
 └── test/
     ├── features/notes/notes_pagination_test.dart
+    ├── features/notes/notes_infinite_scroll_test.dart
+    ├── features/gallery/gallery_pager_test.dart
+    ├── features/gallery/gallery_screen_test.dart
     └── performance_optimization_test.dart
 ```
 
