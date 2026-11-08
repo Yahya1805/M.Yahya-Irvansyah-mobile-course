@@ -42,6 +42,11 @@ class MyApp extends StatelessWidget {
               route: galleryRoute,
             ),
             _ProfileActionButton(
+              tooltip: 'Postingan',
+              icon: Icons.rss_feed,
+              route: postsRoute,
+            ),
+            _ProfileActionButton(
               tooltip: 'Catatan',
               icon: Icons.note_alt_outlined,
               route: notesRoute,

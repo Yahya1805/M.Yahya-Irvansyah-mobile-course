@@ -1,8 +1,8 @@
 # Week 11 — Performance Optimization
 
-Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah **Pemrograman Mobile**. Folder ini merupakan kelanjutan langsung dari project Week 10 (Notes + AI Chat + AI Multimodal) yang dioptimalkan pada empat area: **query database & pencarian**, **rebuild widget saat streaming chat**, **cache jawaban AI**, dan **ukuran payload gambar**.
+Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah **Pemrograman Mobile**. Folder ini merupakan kelanjutan langsung dari project Week 10 (Notes + AI Chat + AI Multimodal) yang dioptimalkan pada lima area: **query database & pencarian**, **rebuild widget saat streaming chat**, **cache jawaban AI**, **ukuran payload gambar**, serta **optimasi jaringan dan caching**.
 
-> Catatan kejujuran: seluruh perubahan kode sudah diimplementasikan dan diuji otomatis (`dart analyze` bersih, 36 test lulus). Angka *before/after* dari Flutter DevTools **belum diisi** karena pengukuran dilakukan pada praktikum akhir. Kolom hasil pengukuran di `docs/perf-log.md` sengaja dibiarkan kosong, bukan diisi angka perkiraan.
+> Catatan kejujuran: seluruh perubahan kode sudah diimplementasikan dan diuji otomatis (`dart analyze` bersih, 53 test lulus). Angka *before/after* dari Flutter DevTools **belum diisi** karena pengukuran dilakukan pada praktikum akhir. Kolom hasil pengukuran di `docs/perf-log.md` sengaja dibiarkan kosong, bukan diisi angka perkiraan.
 
 ---
 
@@ -14,11 +14,12 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
   * `feat/performance-optimization` — pagination, streaming, cache, gambar
   * `feat/widget-rebuild-optimization` — pengurangan widget rebuild (bagian 4)
   * `feat/lazy-loading-image-optimization` — infinite scroll & optimasi gambar tampilan (bagian 5)
+  * `feat/network-caching` — strategi cache, retry Dio, ETag & payload kecil (bagian 6)
 * **Baseline**: project Week 10 (`10-week-10-ai-feature-integration`)
 * **Status mesin**:
   * `dart analyze`: **0 issue (Clean)**
   * `dart format`: konsisten
-  * Test: **36 passed** (baseline 31 test + 5 test optimasi baru)
+  * Test: **53 passed** (baseline 31 test + 22 test optimasi baru)
 
 ---
 
@@ -34,6 +35,8 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 | Gambar tampilan | Gambar 800×600 di-decode penuh untuk tile kecil, diunduh ulang setiap dibuka | Belum ada thumbnail decode, cache disk, placeholder, dan batas image cache |
 | Cache AI | Cache hilang setiap aplikasi ditutup; ukuran cache tidak dibatasi | Cache hanya berupa `static Map` tanpa eviction dan tanpa penyimpanan persisten |
 | Gambar multimodal | Byte gambar kamera dikirim mentah sebagai base64 | Belum ada resize/kompresi sebelum encoding |
+| Feed jaringan | Setiap membuka feed selalu menunggu API; saat offline layar kosong | Belum ada strategi cache, fallback, retry, dan validasi ETag |
+| Payload API | Endpoint mengembalikan seluruh data tanpa batas | Belum memakai `_limit`, kompresi, atau `If-None-Match` |
 
 ---
 
@@ -115,6 +118,24 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 
 > Galeri membutuhkan koneksi internet. Di widget test, gambar jaringan tidak diunduh; yang diuji adalah struktur lazy grid dan logika pagination.
 
+### 9. Optimasi jaringan dan caching (feed Postingan)
+
+Halaman **Postingan** (`/posts`) memakai `https://jsonplaceholder.typicode.com/posts?_limit=30` dan mengimplementasikan keempat strategi dari codelab:
+
+| Strategi | Perilaku di `PostsRepositoryImpl` |
+| :--- | :--- |
+| Cache-first | Baca cache; API hanya dipanggil bila cache kosong |
+| Network-first | Utamakan API; jika gagal, tampilkan cache sebagai fallback |
+| Stale-while-revalidate | Emit cache lebih dulu melalui callback, lalu revalidasi API dan perbarui cache |
+| Cache-only | Hanya membaca SQLite, tanpa request jaringan |
+
+* **Cache persisten:** `cached_posts` menyimpan payload JSON; `posts_cache_meta` menyimpan `etag` dan `last_synced_at` (database naik ke **versi 4**).
+* **Dio + retry:** `createApiClient()` memasang timeout eksplisit (connect 10 s, receive 15 s, send 10 s) dan `RetryInterceptor` dengan jeda 1 s / 2 s / 5 s. Retry hanya untuk timeout, gagal koneksi, HTTP 408, 429, dan 5xx; error 4xx lain langsung diteruskan.
+* **ETag / `If-None-Match`:** ETag cache dikirim pada request berikutnya. Bila server menjawab **304 Not Modified**, body tidak diunduh ulang dan `cached_posts` tidak ditulis ulang; hanya `last_synced_at` yang diperbarui.
+* **Payload kecil:** request memakai `_limit=30`, bukan seluruh isi endpoint. Header `Accept-Encoding: gzip` dikirim agar server dapat mengompresi respons. Pemilihan field per-field (`?fields=...`) memerlukan dukungan backend/GraphQL sehingga tidak dipaksakan pada JSONPlaceholder.
+* **Indikator UI:** halaman menampilkan asal data (`Dari jaringan`, `Dari cache`, `Fallback cache`), badge `304 · tidak berubah`, waktu sinkron terakhir, dan pesan saat fallback.
+* **Uji manual ETag:** respons JSONPlaceholder menyertakan header `ETag`, dan request ulang dengan `If-None-Match` yang sama menghasilkan **304** (dicek via PowerShell, bukan pengukuran performa aplikasi).
+
 ---
 
 ## 🧪 Bukti Pengujian Otomatis
@@ -125,6 +146,9 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 | `test/features/notes/notes_infinite_scroll_test.dart` | Fling mendekati dasar list meminta halaman berikutnya pada offset 20 |
 | `test/features/gallery/gallery_pager_test.dart` | Pagination 20 item/halaman, batas 60, halaman terakhir mengikuti sisa item |
 | `test/features/gallery/gallery_screen_test.dart` | Galeri memakai `GridView.builder` dan `CachedNetworkImage` |
+| `test/core/network/retry_interceptor_test.dart` | Retry 5xx lalu berhasil, 404 tidak diulang, dan pemilihan status/timeout yang layak di-retry |
+| `test/features/posts/posts_repository_test.dart` | Empat strategi cache, fallback, emit stale-while-revalidate, pengiriman ETag, dan penanganan 304 |
+| `test/features/posts/posts_page_test.dart` | Feed menampilkan data, sumber, waktu sinkron, serta pemilihan cache-only |
 | `test/performance_optimization_test.dart` | Gambar 1600×1200 diperkecil ≤400 px dan menjadi JPEG; jawaban AI tetap terbaca dari cache persisten pada instance `AiService` baru |
 | `test/search_filter_test.dart` | Debounce 300 ms dan empty state pencarian |
 | `test/chat_screen_test.dart` | Empty state, bubble streaming, dialog fallback error |
@@ -137,7 +161,7 @@ Menjalankan seluruh test:
 flutter test
 ```
 
-Hasil terakhir: **41 test lulus**.
+Hasil terakhir: **53 test lulus**.
 
 ---
 
@@ -156,13 +180,15 @@ Pengukuran dilakukan pada **emulator/perangkat Android** (bukan Windows desktop,
    * ketik kata kunci di search bar dan berhenti mengetik;
    * buka AI Chat dan kirim satu pertanyaan sampai streaming selesai;
    * buka AI Multimodal lalu jalankan OCR pada gambar besar;
-   * buka Galeri, scroll beberapa halaman, lalu ukur waktu decode dan pemakaian memori gambar.
+   * buka Galeri, scroll beberapa halaman, lalu ukur waktu decode dan pemakaian memori gambar;
+   * buka Postingan, ganti strategi cache, lakukan refresh, lalu matikan jaringan untuk melihat fallback.
 4. Catat pada `docs/perf-log.md`:
    * jumlah frame yang melewati budget 16 ms;
    * puncak memori (DevTools → Memory);
    * ukuran payload gambar sebelum/sesudah kompresi (DevTools → Network atau log `bytes.length`);
    * ukuran gambar yang diunduh vs thumbnail yang di-decode (DevTools → Network);
-   * jumlah rebuild (DevTools → Widget Inspector / `debugPrintRebuildDirtyWidgets`).
+   * jumlah rebuild (DevTools → Widget Inspector / `debugPrintRebuildDirtyWidgets`);
+   * ukuran payload feed dan status HTTP (200 vs 304) di DevTools → Network.
 5. Untuk membandingkan dengan baseline, jalankan project `10-week-10-ai-feature-integration` pada perangkat yang sama dengan skenario identik.
 
 > Karena pengukuran belum dilakukan, README ini tidak mencantumkan angka "sebelum vs sesudah". Isi tabel di `docs/perf-log.md` setelah praktikum agar laporan tetap valid.
@@ -180,21 +206,28 @@ Pengukuran dilakukan pada **emulator/perangkat Android** (bukan Windows desktop,
 │   │   ├── ai_cache.dart               # Kontrak cache + implementasi SQLite (TTL & batas baris)
 │   │   └── ai_service.dart             # LRU cache, cache persisten, kompresi gambar, dispose
 │   ├── core/
-│   │   ├── database/notes_db.dart      # DB v3: index updated_at + tabel ai_cache
+│   │   ├── database/notes_db.dart      # DB v4: index, ai_cache, cached_posts, posts_cache_meta
+│   │   ├── network/
+│   │   │   ├── api_client.dart         # Dio + timeout + gzip + logging
+│   │   │   └── retry_interceptor.dart  # Retry 408/429/5xx/timeout dengan backoff
 │   │   ├── performance/image_optimizer.dart # Resize + JPEG encode di isolate
 │   │   └── providers.dart              # aiServiceProvider (shared instance)
 │   ├── features/
 │   │   ├── notes/                      # Pagination, debounce, select, item terpisah
 │   │   ├── gallery/                    # Galeri lazy grid + cached_network_image
+│   │   ├── posts/                      # Feed + 4 strategi cache + ETag
 │   │   ├── chat_screen.dart            # ValueNotifier + throttle + RepaintBoundary
 │   │   └── multimodal_ai_screen.dart   # Tab diekstrak + RepaintBoundary hasil AI
 │   ├── main.dart                       # Aksi AppBar const + batas image cache
-│   └── routes.dart                     # Inject aiServiceProvider + route galeri
+│   └── routes.dart                     # Route AI, galeri, dan postingan
 └── test/
+    ├── core/network/retry_interceptor_test.dart
     ├── features/notes/notes_pagination_test.dart
     ├── features/notes/notes_infinite_scroll_test.dart
     ├── features/gallery/gallery_pager_test.dart
     ├── features/gallery/gallery_screen_test.dart
+    ├── features/posts/posts_repository_test.dart
+    ├── features/posts/posts_page_test.dart
     └── performance_optimization_test.dart
 ```
 
