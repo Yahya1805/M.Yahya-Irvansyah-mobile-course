@@ -19,6 +19,10 @@ Dokumen ini mencatat **hipotesis**, **perubahan kode**, dan **cara pengukuran** 
 | 4 | Throttle streaming chat | Selesai | Lulus | Belum |
 | 5 | Cache AI berbatas + persisten | Selesai | Lulus | Belum |
 | 6 | Kompresi gambar multimodal | Selesai | Lulus | Belum |
+| 7 | Ekstraksi widget + `const` | Selesai | Lulus | Belum |
+| 8 | Riverpod `select` pada panel notes | Selesai | Lulus | Belum |
+| 9 | `RepaintBoundary` area dinamis | Selesai | Lulus | Belum |
+| 10 | Tear-off callback di build | Selesai | Lulus | Belum |
 
 ---
 
@@ -146,6 +150,95 @@ Dokumen ini mencatat **hipotesis**, **perubahan kode**, dan **cara pengukuran** 
 1. Siapkan foto 3000+ px.
 2. Catat `bytes.length` sebelum dan sesudah `optimizeForAi` (log sementara atau unit test).
 3. Jalankan OCR dan bandingkan waktu respons serta ukuran request di DevTools Network.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 7. Ekstraksi widget + `const` constructor
+
+**Hipotesis:** widget yang dibangun ulang setiap parent rebuild menambah pekerjaan build/layout. Widget `const` dan ekstraksi subtree statis membuat Flutter melewati rebuild untuk instance yang identik.
+
+**Perubahan:**
+- `main.dart`: tiga `Builder` + closure diganti `_ProfileActionButton` dan daftar `actions` const.
+- Notes: `_NoteListItem`, `_NotesListPanel`, `_LoadMoreIndicator` diekstrak; body memakai subtree const.
+- Multimodal: `_MultimodalTab`, `_AiResultPanel`, `_ErrorBanner` diekstrak.
+- `const` ditambahkan pada empty state, ikon, padding, dan teks statis.
+
+**Cara ukur:**
+1. Aktifkan `debugPrintRebuildDirtyWidgets = true`.
+2. Buka halaman Catatan, ketik di search bar, lalu scroll.
+3. Hitung berapa kali AppBar, FAB, dan item di luar perubahan ikut rebuild.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 8. Riverpod `select` pada panel Notes
+
+**Hipotesis:** `ref.watch(notesProvider)` membangun ulang seluruh body setiap field state berubah, termasuk saat hanya `isLoadingMore` berubah. Dengan `select`, panel hanya rebuild saat `notes`, `query`, atau `hasMore` berubah.
+
+**Perubahan:**
+- `_NotesListPanel` memakai tiga `select` terpisah.
+- `_NotesBody` mengembalikan subtree const sehingga rebuild parent tidak membangun ulang search bar/panel.
+- Guard `_requestedNextPage` dipindahkan ke panel dan di-reset lewat `ref.listen`.
+
+**Cara ukur:**
+1. Tambahkan penghitung build sementara pada `_NotesListPanelState`.
+2. Picu `loadMore` dan amati apakah panel rebuild lebih dari sekali.
+3. Bandingkan dengan versi yang memakai `ref.watch` penuh.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 9. `RepaintBoundary` area dinamis
+
+**Hipotesis:** repaint streaming chat dan kedipan cursor search bar dapat memicu repaint area lain jika berada di layer yang sama.
+
+**Perubahan:**
+- `RepaintBoundary` pada search bar Notes.
+- `RepaintBoundary` pada area daftar pesan chat.
+- `RepaintBoundary` pada panel hasil AI multimodal.
+
+**Cara ukur:**
+1. Aktifkan overlay performa / DevTools Performance.
+2. Amati jumlah raster frame saat streaming chat dan saat mengetik di search bar.
+3. Bandingkan dengan baseline sebelum boundary ditambahkan.
+
+**Hasil baseline:** _belum diukur_
+
+**Hasil setelah optimasi:** _belum diukur_
+
+**Catatan/observasi:** _isi saat praktikum_
+
+---
+
+## 10. Tear-off callback di build
+
+**Hipotesis:** closure baru di build method membuat widget anak dianggap berubah dan memicu rebuild. Tear-off method yang stabil memungkinkan Flutter mempertahankan instance.
+
+**Perubahan:**
+- `_handleSubmitted` untuk `TextField.onSubmitted` chat.
+- `_handleAction` dan `_buildMenuItems` statis pada item catatan.
+- `_clear` pada search bar.
+
+**Cara ukur:**
+1. Aktifkan `debugPrintRebuildDirtyWidgets`.
+2. Ketik di input chat dan buka menu aksi catatan.
+3. Amati jumlah rebuild widget yang tidak terkait aksi.
 
 **Hasil baseline:** _belum diukur_
 

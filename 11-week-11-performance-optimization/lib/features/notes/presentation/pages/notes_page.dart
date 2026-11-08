@@ -31,59 +31,14 @@ class NotesPage extends ConsumerWidget {
     ref.invalidate(notesProvider);
   }
 
-  Future<void> _editNote(BuildContext context, WidgetRef ref, Note note) async {
-    final input = await showDialog<({String title, String body})>(
-      context: context,
-      builder: (context) => _NoteDialog(note: note),
-    );
-    if (input == null || !context.mounted || note.id == null) return;
-
-    final failure = await ref
-        .read(updateNoteProvider)
-        .call(id: note.id!, title: input.title, body: input.body);
-    if (!context.mounted) return;
-
-    if (failure != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failure.message)));
-      return;
-    }
-    ref.invalidate(notesProvider);
-  }
-
-  Future<void> _deleteNote(
-    BuildContext context,
-    WidgetRef ref,
-    Note note,
-  ) async {
-    if (note.id == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => _DeleteConfirmDialog(title: note.title),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final failure = await ref.read(deleteNoteProvider).call(note.id!);
-    if (!context.mounted) return;
-
-    if (failure != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failure.message)));
-      return;
-    }
-    ref.invalidate(notesProvider);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(title: const Text('Catatan')),
-      // Hanya bagian body yang mendengarkan provider. Perubahan query atau
-      // halaman baru tidak lagi me-rebuild AppBar dan FAB.
-      body: _NotesBody(
-        onEdit: (note) => _editNote(context, ref, note),
-        onDelete: (note) => _deleteNote(context, ref, note),
-      ),
+      // Body memakai widget const. Saat state berubah, Flutter tidak perlu
+      // membangun ulang subtree body dari awal; hanya panel daftar yang
+      // mendengarkan provider lewat select.
+      body: const _NotesBody(),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _addNote(context, ref),
         tooltip: 'Tambah catatan',
@@ -94,10 +49,7 @@ class NotesPage extends ConsumerWidget {
 }
 
 class _NotesBody extends ConsumerWidget {
-  const _NotesBody({required this.onEdit, required this.onDelete});
-
-  final ValueChanged<Note> onEdit;
-  final ValueChanged<Note> onDelete;
+  const _NotesBody();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -111,41 +63,139 @@ class _NotesBody extends ConsumerWidget {
             : 'Gagal memuat catatan. Silakan coba lagi.',
         onRetry: () => ref.invalidate(notesProvider),
       ),
-      data: (data) {
-        if (data.query.isEmpty && data.notes.isEmpty) {
-          return const Center(child: Text('Belum ada catatan.'));
-        }
-        return Column(
-          children: [
-            const _SearchBar(),
-            Expanded(
-              child: data.notes.isEmpty
-                  ? _EmptySearchState(query: data.query)
-                  : _NotesList(
-                      notes: data.notes,
-                      hasMore: data.hasMore,
-                      onLoadMore: () => _loadMore(context, ref),
-                      onEdit: onEdit,
-                      onDelete: onDelete,
-                    ),
-            ),
-          ],
-        );
-      },
+      // Subtree ini const sehingga rebuild dari perubahan state tidak
+      // membangun ulang search bar maupun panel daftar.
+      data: (_) => const Column(
+        children: [
+          _SearchBar(),
+          Expanded(child: _NotesListPanel()),
+        ],
+      ),
     );
   }
+}
 
-  Future<void> _loadMore(BuildContext context, WidgetRef ref) async {
+/// Panel daftar catatan yang hanya mendengarkan bagian state yang dipakai.
+///
+/// Dengan `select`, perubahan `isLoadingMore` atau field lain tidak memicu
+/// rebuild panel selama daftar catatan, query, dan `hasMore` tidak berubah.
+class _NotesListPanel extends ConsumerStatefulWidget {
+  const _NotesListPanel();
+
+  @override
+  ConsumerState<_NotesListPanel> createState() => _NotesListPanelState();
+}
+
+class _NotesListPanelState extends ConsumerState<_NotesListPanel> {
+  bool _requestedNextPage = false;
+
+  Future<void> _loadMore() async {
     try {
       await ref.read(notesProvider.notifier).loadMore();
     } catch (error) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       final message = error is Failure
           ? error.message
           : 'Gagal memuat catatan berikutnya.';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+
+  Future<void> _editNote(Note note) async {
+    final input = await showDialog<({String title, String body})>(
+      context: context,
+      builder: (context) => _NoteDialog(note: note),
+    );
+    if (input == null || !mounted || note.id == null) return;
+
+    final failure = await ref
+        .read(updateNoteProvider)
+        .call(id: note.id!, title: input.title, body: input.body);
+    if (!mounted) return;
+
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+      return;
+    }
+    ref.invalidate(notesProvider);
+  }
+
+  Future<void> _deleteNote(Note note) async {
+    if (note.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _DeleteConfirmDialog(title: note.title),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final failure = await ref.read(deleteNoteProvider).call(note.id!);
+    if (!mounted) return;
+
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+      return;
+    }
+    ref.invalidate(notesProvider);
+  }
+
+  void _requestNextPage() {
+    if (_requestedNextPage) return;
+    _requestedNextPage = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadMore();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final notes = ref.watch(
+      notesProvider.select((state) => state.value?.notes),
+    );
+    final query = ref.watch(
+      notesProvider.select((state) => state.value?.query ?? ''),
+    );
+    final hasMore = ref.watch(
+      notesProvider.select((state) => state.value?.hasMore ?? false),
+    );
+
+    // Daftar diganti (query berubah / refresh), izinkan request halaman lagi.
+    ref.listen<List<Note>?>(
+      notesProvider.select((state) => state.value?.notes),
+      (previous, next) {
+        if (!identical(previous, next)) _requestedNextPage = false;
+      },
+    );
+
+    if (notes == null) return const SizedBox.shrink();
+    if (notes.isEmpty) {
+      return query.isEmpty
+          ? const Center(child: Text('Belum ada catatan.'))
+          : _EmptySearchState(query: query);
+    }
+
+    return ListView.builder(
+      itemCount: notes.length + (hasMore ? 1 : 0),
+      // Keep-alive tidak diperlukan untuk daftar pendek; mematikan fitur ini
+      // mengurangi jumlah widget yang disimpan di memori saat scroll.
+      addAutomaticKeepAlives: false,
+      itemBuilder: (context, index) {
+        if (index >= notes.length) {
+          _requestNextPage();
+          return const _LoadMoreIndicator();
+        }
+
+        final note = notes[index];
+        return _NoteListItem(
+          key: ValueKey(note.id),
+          note: note,
+          onEdit: _editNote,
+          onDelete: _deleteNote,
+        );
+      },
+    );
   }
 }
 
@@ -191,21 +241,25 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: TextField(
-        key: const Key('searchNotesField'),
-        controller: _controller,
-        decoration: InputDecoration(
-          hintText: 'Cari catatan...',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _text.isNotEmpty
-              ? IconButton(icon: const Icon(Icons.clear), onPressed: _clear)
-              : null,
-          border: const OutlineInputBorder(),
-          isDense: true,
+    // RepaintBoundary memisahkan layer search bar dari daftar. Kedipan cursor
+    // dan perubahan teks tidak memaksa area list ikut di-repaint.
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: TextField(
+          key: const Key('searchNotesField'),
+          controller: _controller,
+          decoration: InputDecoration(
+            hintText: 'Cari catatan...',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _text.isNotEmpty
+                ? IconButton(icon: const Icon(Icons.clear), onPressed: _clear)
+                : null,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: _onChanged,
         ),
-        onChanged: _onChanged,
       ),
     );
   }
@@ -280,95 +334,70 @@ class _DeleteConfirmDialog extends StatelessWidget {
   }
 }
 
-class _NotesList extends StatefulWidget {
-  const _NotesList({
-    required this.notes,
-    required this.hasMore,
-    required this.onLoadMore,
+class _LoadMoreIndicator extends StatelessWidget {
+  const _LoadMoreIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+}
+
+/// Item catatan dipisah menjadi widget sendiri agar menu dan callback-nya
+/// tidak dibangun ulang setiap kali daftar induk berubah.
+class _NoteListItem extends StatelessWidget {
+  const _NoteListItem({
+    super.key,
+    required this.note,
     required this.onEdit,
     required this.onDelete,
   });
 
-  final List<Note> notes;
-  final bool hasMore;
-  final VoidCallback onLoadMore;
+  final Note note;
   final ValueChanged<Note> onEdit;
   final ValueChanged<Note> onDelete;
 
-  @override
-  State<_NotesList> createState() => _NotesListState();
-}
-
-class _NotesListState extends State<_NotesList> {
-  bool _requestedNextPage = false;
-
-  @override
-  void didUpdateWidget(covariant _NotesList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Daftar diganti (query berubah / refresh), izinkan request halaman lagi.
-    if (!identical(oldWidget.notes, widget.notes)) {
-      _requestedNextPage = false;
-    }
+  /// Tear-off statis: instance menu yang sama dipakai ulang, bukan closure
+  /// baru yang dibuat setiap build.
+  static List<PopupMenuEntry<String>> _buildMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(value: 'edit', child: Text('Edit')),
+      PopupMenuItem(value: 'delete', child: Text('Hapus')),
+    ];
   }
 
-  void _requestNextPage() {
-    if (_requestedNextPage) return;
-    _requestedNextPage = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onLoadMore();
-    });
+  void _handleAction(String action) {
+    if (action == 'edit') onEdit(note);
+    if (action == 'delete') onDelete(note);
   }
 
   @override
   Widget build(BuildContext context) {
-    final itemCount = widget.notes.length + (widget.hasMore ? 1 : 0);
-
-    return ListView.builder(
-      itemCount: itemCount,
-      // Keep-alive tidak diperlukan untuk daftar pendek; mematikan fitur ini
-      // mengurangi jumlah widget yang disimpan di memori saat scroll.
-      addAutomaticKeepAlives: false,
-      itemBuilder: (context, index) {
-        if (index >= widget.notes.length) {
-          _requestNextPage();
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          );
-        }
-
-        final note = widget.notes[index];
-        return ListTile(
-          key: ValueKey(note.id),
-          title: Text(note.title),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (note.body.isNotEmpty) Text(note.body),
-              Text(formatDate(note.updatedAt)),
-            ],
-          ),
-          trailing: PopupMenuButton<String>(
-            tooltip: 'Aksi ${note.title}',
-            onSelected: (action) {
-              if (action == 'edit') widget.onEdit(note);
-              if (action == 'delete') widget.onDelete(note);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'edit', child: Text('Edit')),
-              PopupMenuItem(value: 'delete', child: Text('Hapus')),
-            ],
-            icon: const Icon(Icons.more_vert),
-          ),
-        );
-      },
+    return ListTile(
+      title: Text(note.title),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (note.body.isNotEmpty) Text(note.body),
+          Text(formatDate(note.updatedAt)),
+        ],
+      ),
+      trailing: PopupMenuButton<String>(
+        tooltip: 'Aksi ${note.title}',
+        onSelected: _handleAction,
+        itemBuilder: _buildMenuItems,
+        icon: const Icon(Icons.more_vert),
+      ),
     );
   }
 }
