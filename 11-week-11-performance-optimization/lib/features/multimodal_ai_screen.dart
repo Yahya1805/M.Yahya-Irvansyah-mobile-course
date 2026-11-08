@@ -160,43 +160,62 @@ class _MultimodalAiScreenState extends State<MultimodalAiScreen>
           : TabBarView(
               controller: _tabController,
               children: [
-                _buildTabContent(
+                _MultimodalTab(
                   title: 'Ekstraksi Teks (OCR)',
                   description: 'Mengekstrak teks dari foto KTM, dokumen, atau struk belanja menggunakan Gemini Vision.',
                   buttonLabel: 'Pindai Teks Gambar (OCR)',
                   buttonIcon: Icons.camera_alt,
                   result: _ocrResult,
+                  errorMessage: _errorMessage,
                   onPressed: _processOcr,
                 ),
-                _buildTabContent(
+                _MultimodalTab(
                   title: 'Image Understanding',
                   description: 'Menganalisis objek, mendeskripsikan pemandangan, atau menjelaskan isi gambar.',
                   buttonLabel: 'Analisis & Deskripsikan Gambar',
                   buttonIcon: Icons.image_search,
                   result: _visionResult,
+                  errorMessage: _errorMessage,
                   onPressed: _processImageUnderstanding,
                 ),
-                _buildTabContent(
+                _MultimodalTab(
                   title: 'Speech-to-Text (Transkripsi)',
                   description: 'Mengonversi rekaman suara percakapan menjadi teks Bahasa Indonesia secara otomatis.',
                   buttonLabel: 'Mulai Transkripsi Audio',
                   buttonIcon: Icons.mic,
                   result: _audioResult,
+                  errorMessage: _errorMessage,
                   onPressed: _processSpeechToText,
                 ),
               ],
             ),
     );
   }
+}
 
-  Widget _buildTabContent({
-    required String title,
-    required String description,
-    required String buttonLabel,
-    required IconData buttonIcon,
-    required String? result,
-    required VoidCallback onPressed,
-  }) {
+/// Konten satu tab dipisah dari halaman utama agar perubahan state lain tidak
+/// membangun ulang seluruh isi tab beserta subtreenya.
+class _MultimodalTab extends StatelessWidget {
+  const _MultimodalTab({
+    required this.title,
+    required this.description,
+    required this.buttonLabel,
+    required this.buttonIcon,
+    required this.result,
+    required this.errorMessage,
+    required this.onPressed,
+  });
+
+  final String title;
+  final String description;
+  final String buttonLabel;
+  final IconData buttonIcon;
+  final String? result;
+  final String? errorMessage;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -228,41 +247,14 @@ class _MultimodalAiScreenState extends State<MultimodalAiScreen>
             label: Text(buttonLabel),
           ),
           const SizedBox(height: 16),
-          if (_errorMessage != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Text(
-                'Terjadi Kesalahan: $_errorMessage',
-                style: TextStyle(color: Colors.red.shade800),
-              ),
-            ),
+          if (errorMessage != null) _ErrorBanner(message: errorMessage!),
           if (result != null) ...[
             const Text(
               'Hasil Respons AI:',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    result,
-                    style: const TextStyle(fontSize: 15, height: 1.4),
-                  ),
-                ),
-              ),
-            ),
+            Expanded(child: _AiResultPanel(result: result!)),
           ] else
             const Expanded(
               child: Center(
@@ -273,6 +265,56 @@ class _MultimodalAiScreenState extends State<MultimodalAiScreen>
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Hasil AI bersifat statis setelah dimuat. RepaintBoundary mencegah area ini
+/// ikut di-repaint ketika indikator loading atau tab lain berubah.
+class _AiResultPanel extends StatelessWidget {
+  const _AiResultPanel({required this.result});
+
+  final String result;
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: SingleChildScrollView(
+          child: SelectableText(
+            result,
+            style: const TextStyle(fontSize: 15, height: 1.4),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Text(
+        'Terjadi Kesalahan: $message',
+        style: TextStyle(color: Colors.red.shade800),
       ),
     );
   }

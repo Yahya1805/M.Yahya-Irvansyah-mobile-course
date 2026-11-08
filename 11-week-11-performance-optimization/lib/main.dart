@@ -15,33 +15,23 @@ class MyApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Profil Mahasiswa'),
-          actions: [
-            Builder(
-              builder: (context) => IconButton(
-                tooltip: 'AI Multimodal (OCR, Vision, STT)',
-                icon: const Icon(Icons.document_scanner),
-                onPressed: () {
-                  Navigator.of(context).pushNamed(aiMultimodalRoute);
-                },
-              ),
+          // Daftar aksi const: tidak dibangun ulang setiap MyApp rebuild,
+          // dan tidak ada lagi Builder + closure di build method induk.
+          actions: const [
+            _ProfileActionButton(
+              tooltip: 'AI Multimodal (OCR, Vision, STT)',
+              icon: Icons.document_scanner,
+              route: aiMultimodalRoute,
             ),
-            Builder(
-              builder: (context) => IconButton(
-                tooltip: 'AI Chat Assistant',
-                icon: const Icon(Icons.auto_awesome),
-                onPressed: () {
-                  Navigator.of(context).pushNamed(aiChatRoute);
-                },
-              ),
+            _ProfileActionButton(
+              tooltip: 'AI Chat Assistant',
+              icon: Icons.auto_awesome,
+              route: aiChatRoute,
             ),
-            Builder(
-              builder: (context) => IconButton(
-                tooltip: 'Catatan',
-                icon: const Icon(Icons.note_alt_outlined),
-                onPressed: () {
-                  Navigator.of(context).pushNamed(notesRoute);
-                },
-              ),
+            _ProfileActionButton(
+              tooltip: 'Catatan',
+              icon: Icons.note_alt_outlined,
+              route: notesRoute,
             ),
           ],
         ),
@@ -57,6 +47,35 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Tombol navigasi profil yang bisa dibuat `const`.
+///
+/// Sebelumnya setiap tombol dibungkus `Builder` dengan closure baru di dalam
+/// build method [MyApp]. Dengan widget terpisah, tombol hanya dibangun sekali.
+class _ProfileActionButton extends StatelessWidget {
+  const _ProfileActionButton({
+    required this.tooltip,
+    required this.icon,
+    required this.route,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final String route;
+
+  void _open(BuildContext context) {
+    Navigator.of(context).pushNamed(route);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon),
+      onPressed: () => _open(context),
     );
   }
 }

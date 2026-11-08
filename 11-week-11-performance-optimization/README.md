@@ -10,7 +10,9 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 
 * **Mahasiswa**: M. Yahya Irvansyah
 * **Mata Kuliah**: Pemrograman Mobile (Semester Genap 2026)
-* **Branch**: `feat/performance-optimization`
+* **Branch**:
+  * `feat/performance-optimization` — pagination, streaming, cache, gambar
+  * `feat/widget-rebuild-optimization` — pengurangan widget rebuild (bagian 4)
 * **Baseline**: project Week 10 (`10-week-10-ai-feature-integration`)
 * **Status mesin**:
   * `dart analyze`: **0 issue (Clean)**
@@ -26,6 +28,7 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 | Daftar catatan | Membuka halaman Catatan memuat seluruh isi database sekaligus | `fetchNotes()` memakai `SELECT *` tanpa limit dan seluruh hasil dibangun menjadi widget |
 | Pencarian catatan | Setiap ketikan langsung memicu query dan rebuild halaman | Tidak ada debounce; state halaman berada di widget yang sama dengan AppBar/FAB |
 | Streaming chat | Bubble chat dan seluruh halaman ikut di-render ulang untuk setiap potongan kata | State streaming disimpan di `setState()` halaman |
+| Widget rebuild | AppBar, tombol, dan item list ikut dibangun ulang saat state kecil berubah | Closure baru di build, widget tidak `const`, listener provider terlalu lebar |
 | Cache AI | Cache hilang setiap aplikasi ditutup; ukuran cache tidak dibatasi | Cache hanya berupa `static Map` tanpa eviction dan tanpa penyimpanan persisten |
 | Gambar multimodal | Byte gambar kamera dikirim mentah sebagai base64 | Belum ada resize/kompresi sebelum encoding |
 
@@ -57,7 +60,19 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 * Update visual di-throttle maksimal **~20 kali/detik** (interval 50 ms), bukan satu rebuild per chunk.
 * Auto-scroll hanya dilakukan jika pengguna masih berada dekat dasar list (≤160 px), sehingga riwayat yang sedang dibaca tidak "tertarik" ke bawah.
 
-### 4. Cache AI berbatas + offline-first
+### 4. Mengurangi widget rebuild yang tidak perlu
+
+* **`const` constructor** dipakai pada subtree statis: daftar aksi AppBar profil, empty state, padding, ikon, dan teks.
+* **Ekstraksi widget** dari build method:
+  * `_NoteListItem` — item catatan berdiri sendiri, bukan `ListTile` inline di `itemBuilder`;
+  * `_NotesListPanel` — panel daftar const yang mendengarkan provider sendiri;
+  * `_MultimodalTab`, `_AiResultPanel`, `_ErrorBanner` — konten tab dipisah dari halaman utama;
+  * `_ProfileActionButton` — menggantikan tiga `Builder` + closure di `main.dart`.
+* **Riverpod `select`** pada `_NotesListPanel`: hanya mendengarkan `notes`, `query`, dan `hasMore`; perubahan field lain tidak memicu rebuild panel.
+* **Tear-off callback** menggantikan closure di build: `_handleSubmitted` (chat), `_handleAction` dan `_buildMenuItems` (item catatan), `_clear` (search bar).
+* **`RepaintBoundary`** pada search bar, area daftar chat, dan panel hasil AI agar repaint tetap lokal.
+
+### 5. Cache AI berbatas + offline-first
 
 * Cache in-memory berubah dari `static Map` menjadi **instance LRU** dengan batas 50 entri.
 * Ditambahkan `AiCacheStore` dengan implementasi `SqfliteAiCacheStore` pada tabel `ai_cache`:
@@ -67,7 +82,7 @@ Portofolio implementasi **Optimasi Performa Aplikasi Mobile** untuk mata kuliah 
 * Cache dicek **sebelum** kuota harian dinaikkan, sehingga pertanyaan berulang tidak memakan kuota.
 * `AiService` dibagikan lewat `aiServiceProvider` (Riverpod), sehingga HTTP client dan cache tidak dibuat ulang setiap route dibuka.
 
-### 5. Kompresi gambar sebelum dikirim ke AI
+### 6. Kompresi gambar sebelum dikirim ke AI
 
 * `ImageOptimizer.optimizeForAi()`:
   * memperkecil sisi terpanjang menjadi maksimal **1024 px**;
@@ -141,9 +156,10 @@ Pengukuran dilakukan pada **emulator/perangkat Android** (bukan Windows desktop,
 │   │   ├── performance/image_optimizer.dart # Resize + JPEG encode di isolate
 │   │   └── providers.dart              # aiServiceProvider (shared instance)
 │   ├── features/
-│   │   ├── notes/                      # Pagination, debounce, isolasi rebuild
-│   │   ├── chat_screen.dart            # ValueNotifier + throttle streaming
-│   │   └── multimodal_ai_screen.dart   # Memakai AiService bersama
+│   │   ├── notes/                      # Pagination, debounce, select, item terpisah
+│   │   ├── chat_screen.dart            # ValueNotifier + throttle + RepaintBoundary
+│   │   └── multimodal_ai_screen.dart   # Tab diekstrak + RepaintBoundary hasil AI
+│   ├── main.dart                       # Aksi AppBar const tanpa Builder/closure
 │   └── routes.dart                     # Inject aiServiceProvider ke layar AI
 └── test/
     ├── features/notes/notes_pagination_test.dart

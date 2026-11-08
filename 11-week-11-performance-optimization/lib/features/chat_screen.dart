@@ -115,6 +115,10 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Tear-off untuk `TextField.onSubmitted`, menghindari closure baru di
+  /// build method input field.
+  void _handleSubmitted(String _) => _sendMessage();
+
   /// Throttle update visual agar maksimal ~20 rebuild/detik, bukan satu
   /// rebuild untuk setiap kata yang keluar dari stream.
   void _onStreamChunk(String chunk) {
@@ -275,19 +279,24 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _messages.isEmpty && !_hasStreamingBubble
-                ? const _ChatEmptyState()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _messages.length + (_hasStreamingBubble ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index < _messages.length) {
-                        return _MessageBubble(message: _messages[index]);
-                      }
-                      return _StreamingBubble(text: _streamingText);
-                    },
-                  ),
+            // Isolasi layer daftar pesan dari input field dan AppBar. Repaint
+            // streaming hanya menyentuh layer bubble, bukan seluruh layar.
+            child: RepaintBoundary(
+              child: _messages.isEmpty && !_hasStreamingBubble
+                  ? const _ChatEmptyState()
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(12),
+                      itemCount:
+                          _messages.length + (_hasStreamingBubble ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index < _messages.length) {
+                          return _MessageBubble(message: _messages[index]);
+                        }
+                        return _StreamingBubble(text: _streamingText);
+                      },
+                    ),
+            ),
           ),
           if (_isLoading && !_hasStreamingBubble)
             const LinearProgressIndicator(),
@@ -295,6 +304,7 @@ class _ChatScreenState extends State<ChatScreen> {
             controller: _inputController,
             isLoading: _isLoading,
             onSend: _sendMessage,
+            onSubmitted: _handleSubmitted,
           ),
         ],
       ),
@@ -439,11 +449,13 @@ class _ChatInputField extends StatelessWidget {
     required this.controller,
     required this.isLoading,
     required this.onSend,
+    required this.onSubmitted,
   });
 
   final TextEditingController controller;
   final bool isLoading;
   final VoidCallback onSend;
+  final ValueChanged<String> onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -460,7 +472,7 @@ class _ChatInputField extends StatelessWidget {
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              onSubmitted: (_) => onSend(),
+              onSubmitted: onSubmitted,
             ),
           ),
           const SizedBox(width: 8),
