@@ -17,6 +17,7 @@ class _MultimodalAiScreenState extends State<MultimodalAiScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final AiService _aiService;
+  late final bool _ownsAiService;
 
   bool _isLoading = false;
   String? _ocrResult;
@@ -28,12 +29,14 @@ class _MultimodalAiScreenState extends State<MultimodalAiScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _ownsAiService = widget.aiService == null;
     _aiService = widget.aiService ?? AiService();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    if (_ownsAiService) _aiService.dispose();
     super.dispose();
   }
 

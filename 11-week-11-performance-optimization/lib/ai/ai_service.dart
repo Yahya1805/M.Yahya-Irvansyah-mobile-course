@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../core/performance/image_optimizer.dart';
+import 'ai_cache.dart';
+
 class AiServiceException implements Exception {
   AiServiceException(
     this.message, {
@@ -22,19 +25,26 @@ class AiService {
   AiService({
     http.Client? client,
     FlutterSecureStorage? storage,
+    AiCacheStore? cache,
     this.maxDailyRequests = 20,
   }) : _client = client ?? http.Client(),
-       _storage = storage ?? const FlutterSecureStorage();
+       _storage = storage ?? const FlutterSecureStorage(),
+       // ignore: prefer_initializing_formals
+       _cache = cache,
+       _ownsClient = client == null;
 
   final http.Client _client;
   final FlutterSecureStorage _storage;
+  final AiCacheStore? _cache;
+  final bool _ownsClient;
   final int maxDailyRequests;
 
   final String _apiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
-  // Cache lokal in-memory untuk efisiensi biaya (Cost Optimization)
-  static final Map<String, String> _responseCache = {};
+  // Cache lokal in-memory dengan batas ukuran (LRU sederhana).
+  static const int _maxCacheEntries = 50;
+  final Map<String, String> _responseCache = <String, String>{};
 
   // Database fallback lokal jika AI API sedang offline / down
   static final Map<String, String> _localFallbackAnswers = {
@@ -69,8 +79,9 @@ class AiService {
 
     // 1. Cek Cache Lokal (Menghemat kuota & biaya token)
     final cacheKey = cleanPrompt.toLowerCase();
-    if (_responseCache.containsKey(cacheKey)) {
-      return '${_responseCache[cacheKey]!} (Diambil dari Cache Lokal)';
+    final cached = await _readCache(cacheKey);
+    if (cached != null) {
+      return '$cached (Diambil dari Cache Lokal)';
     }
 
     // 2. Kontrol Biaya: Batasi Kuota Harian (Rate Limiting)
@@ -96,7 +107,7 @@ class AiService {
           .timeout(const Duration(seconds: 10));
 
       final result = _parseGeminiResponse(response);
-      _responseCache[cacheKey] = result;
+      await _writeCache(cacheKey, result);
       return result;
     } on AiServiceException {
       rethrow;
@@ -122,7 +133,11 @@ class AiService {
     await _checkAndIncrementDailyQuota();
     try {
       final apiKey = await _getValidApiKey();
-      final base64Image = base64Encode(imageBytes);
+      final optimized = await ImageOptimizer.optimizeForAi(
+        imageBytes,
+        mimeType: mimeType,
+      );
+      final base64Image = base64Encode(optimized.bytes);
 
       final response = await _client
           .post(
@@ -139,7 +154,7 @@ class AiService {
                     },
                     {
                       'inline_data': {
-                        'mime_type': mimeType,
+                        'mime_type': optimized.mimeType,
                         'data': base64Image,
                       },
                     },
@@ -167,7 +182,11 @@ class AiService {
     await _checkAndIncrementDailyQuota();
     try {
       final apiKey = await _getValidApiKey();
-      final base64Image = base64Encode(imageBytes);
+      final optimized = await ImageOptimizer.optimizeForAi(
+        imageBytes,
+        mimeType: mimeType,
+      );
+      final base64Image = base64Encode(optimized.bytes);
 
       final response = await _client
           .post(
@@ -180,7 +199,7 @@ class AiService {
                     {'text': prompt},
                     {
                       'inline_data': {
-                        'mime_type': mimeType,
+                        'mime_type': optimized.mimeType,
                         'data': base64Image,
                       },
                     },
@@ -271,6 +290,45 @@ class AiService {
       );
     }
     await _storage.write(key: 'req_count_$today', value: '${count + 1}');
+  }
+
+  Future<String?> _readCache(String key) async {
+    final inMemory = _responseCache.remove(key);
+    if (inMemory != null) {
+      // Pindahkan ke urutan terakhir sebagai penanda recently used.
+      _responseCache[key] = inMemory;
+      return inMemory;
+    }
+
+    try {
+      final persisted = await _cache?.read(key);
+      if (persisted != null) _putMemoryCache(key, persisted);
+      return persisted;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeCache(String key, String value) async {
+    _putMemoryCache(key, value);
+    try {
+      await _cache?.write(key, value);
+    } catch (_) {
+      // Cache persisten bersifat best-effort.
+    }
+  }
+
+  void _putMemoryCache(String key, String value) {
+    _responseCache.remove(key);
+    _responseCache[key] = value;
+    while (_responseCache.length > _maxCacheEntries) {
+      _responseCache.remove(_responseCache.keys.first);
+    }
+  }
+
+  /// Menutup HTTP client hanya jika dibuat sendiri oleh [AiService].
+  void dispose() {
+    if (_ownsClient) _client.close();
   }
 
   String _matchFallbackAnswer(String query) {

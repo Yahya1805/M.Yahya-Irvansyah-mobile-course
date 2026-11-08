@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../ai/ai_service.dart';
@@ -29,35 +30,55 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   late final AiService _aiService;
+  late final bool _ownsAiService;
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  /// Hanya bubble streaming yang mendengarkan notifier ini, sehingga chunk
+  /// token tidak me-rebuild seluruh halaman chat.
+  final ValueNotifier<String> _streamingText = ValueNotifier<String>('');
+
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
-  String? _streamingAiText;
+  bool _hasStreamingBubble = false;
+  String _pendingText = '';
+  Timer? _streamTimer;
+
   StreamSubscription<String>? _streamSubscription;
 
   @override
   void initState() {
     super.initState();
+    _ownsAiService = widget.aiService == null;
     _aiService = widget.aiService ?? AiService();
   }
 
   @override
   void dispose() {
+    _streamTimer?.cancel();
     _streamSubscription?.cancel();
+    _streamingText.dispose();
     _inputController.dispose();
     _scrollController.dispose();
+    if (_ownsAiService) _aiService.dispose();
     super.dispose();
   }
 
-  void _scrollToBottom() {
+  /// Scroll otomatis hanya jika pengguna masih berada di dekat dasar list.
+  void _scrollToBottom({bool animate = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+      if (!mounted || !_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      final distanceFromBottom = position.maxScrollExtent - position.pixels;
+      if (distanceFromBottom > 160) return;
+      if (animate) {
+        position.animateTo(
+          position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
+      } else {
+        position.jumpTo(position.maxScrollExtent);
       }
     });
   }
@@ -67,48 +88,26 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty || _isLoading) return;
 
     _inputController.clear();
+    _pendingText = '';
     setState(() {
       _messages.add(
         ChatMessage(text: text, isUser: true, timestamp: DateTime.now()),
       );
       _isLoading = true;
-      _streamingAiText = '';
+      _hasStreamingBubble = true;
     });
-    _scrollToBottom();
+    _streamingText.value = '';
+    _scrollToBottom(animate: true);
 
     try {
       final stream = _aiService.askStream(text);
       await _streamSubscription?.cancel();
       _streamSubscription = stream.listen(
-        (chunk) {
-          setState(() {
-            _streamingAiText = chunk;
-          });
-          _scrollToBottom();
-        },
+        _onStreamChunk,
         onError: (Object error) {
           _handleErrorWithFallback(error, text);
         },
-        onDone: () {
-          if (_streamingAiText != null && _streamingAiText!.isNotEmpty) {
-            final isOfflineFallback =
-                _streamingAiText!.contains('Mode Offline') ||
-                _streamingAiText!.contains('Layanan AI sedang sibuk');
-            setState(() {
-              _messages.add(
-                ChatMessage(
-                  text: _streamingAiText!,
-                  isUser: false,
-                  timestamp: DateTime.now(),
-                  isFallback: isOfflineFallback,
-                ),
-              );
-              _streamingAiText = null;
-              _isLoading = false;
-            });
-            _scrollToBottom();
-          }
-        },
+        onDone: _onStreamDone,
         cancelOnError: true,
       );
     } catch (e) {
@@ -116,10 +115,63 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Throttle update visual agar maksimal ~20 rebuild/detik, bukan satu
+  /// rebuild untuk setiap kata yang keluar dari stream.
+  void _onStreamChunk(String chunk) {
+    _pendingText = chunk;
+    _streamTimer ??= Timer(const Duration(milliseconds: 50), () {
+      _streamTimer = null;
+      if (!mounted) return;
+      _streamingText.value = _pendingText;
+      _scrollToBottom();
+    });
+  }
+
+  void _onStreamDone() {
+    _streamTimer?.cancel();
+    _streamTimer = null;
+
+    final finalText = _pendingText.isNotEmpty
+        ? _pendingText
+        : _streamingText.value;
+    if (!mounted) return;
+
+    if (finalText.isEmpty) {
+      setState(() {
+        _hasStreamingBubble = false;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    final isOfflineFallback =
+        finalText.contains('Mode Offline') ||
+        finalText.contains('Layanan AI sedang sibuk');
+
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          text: finalText,
+          isUser: false,
+          timestamp: DateTime.now(),
+          isFallback: isOfflineFallback,
+        ),
+      );
+      _streamingText.value = '';
+      _hasStreamingBubble = false;
+      _isLoading = false;
+    });
+    _scrollToBottom();
+  }
+
   void _handleErrorWithFallback(Object error, String originalQuestion) {
+    _streamTimer?.cancel();
+    _streamTimer = null;
+
     setState(() {
       _isLoading = false;
-      _streamingAiText = null;
+      _hasStreamingBubble = false;
+      _streamingText.value = '';
     });
 
     final errorMsg = error.toString().replaceAll('Exception: ', '');
@@ -204,6 +256,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+    keyController.dispose();
   }
 
   @override
@@ -222,23 +275,21 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _messages.isEmpty && _streamingAiText == null
+            child: _messages.isEmpty && !_hasStreamingBubble
                 ? const _ChatEmptyState()
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(12),
-                    itemCount:
-                        _messages.length + (_streamingAiText != null ? 1 : 0),
+                    itemCount: _messages.length + (_hasStreamingBubble ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index < _messages.length) {
                         return _MessageBubble(message: _messages[index]);
                       }
-                      return _StreamingBubble(text: _streamingAiText ?? '');
+                      return _StreamingBubble(text: _streamingText);
                     },
                   ),
           ),
-          if (_isLoading &&
-              (_streamingAiText == null || _streamingAiText!.isEmpty))
+          if (_isLoading && !_hasStreamingBubble)
             const LinearProgressIndicator(),
           _ChatInputField(
             controller: _inputController,
@@ -261,6 +312,8 @@ class _MessageBubble extends StatelessWidget {
     final isUser = message.isUser;
     final isFallback = message.isFallback;
     final theme = Theme.of(context);
+    // sizeOf hanya rebuild saat ukuran layar berubah, bukan setiap frame.
+    final maxWidth = MediaQuery.sizeOf(context).width * 0.78;
 
     Color bgColor;
     if (isUser) {
@@ -276,9 +329,7 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
-        ),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(16).copyWith(
@@ -332,19 +383,19 @@ class _MessageBubble extends StatelessWidget {
 class _StreamingBubble extends StatelessWidget {
   const _StreamingBubble({required this.text});
 
-  final String text;
+  final ValueListenable<String> text;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final maxWidth = MediaQuery.sizeOf(context).width * 0.78;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
-        ),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16)
@@ -355,12 +406,19 @@ class _StreamingBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Flexible(
-              child: Text(
-                text.isEmpty ? 'Mengetik respons...' : text,
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface,
-                  fontStyle: text.isEmpty ? FontStyle.italic : FontStyle.normal,
-                ),
+              child: ValueListenableBuilder<String>(
+                valueListenable: text,
+                builder: (context, value, _) {
+                  return Text(
+                    value.isEmpty ? 'Mengetik respons...' : value,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontStyle: value.isEmpty
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(width: 4),
