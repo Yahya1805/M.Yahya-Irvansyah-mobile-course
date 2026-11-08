@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -74,40 +76,13 @@ class NotesPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(notesProvider);
-    final filteredState = ref.watch(filteredNotesProvider);
-    final query = ref.watch(noteSearchQueryProvider);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Catatan')),
-      body: state.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => _ErrorState(
-          message: err is Failure
-              ? err.message
-              : 'Gagal memuat catatan. Silakan coba lagi.',
-          onRetry: () => ref.invalidate(notesProvider),
-        ),
-        data: (notes) {
-          if (notes.isEmpty) {
-            return const Center(child: Text('Belum ada catatan.'));
-          }
-          final filteredNotes = filteredState.value ?? notes;
-          return Column(
-            children: [
-              _SearchBar(query: query),
-              Expanded(
-                child: filteredNotes.isEmpty
-                    ? _EmptySearchState(query: query)
-                    : _NotesList(
-                        filteredNotes,
-                        onEdit: (note) => _editNote(context, ref, note),
-                        onDelete: (note) => _deleteNote(context, ref, note),
-                      ),
-              ),
-            ],
-          );
-        },
+      // Hanya bagian body yang mendengarkan provider. Perubahan query atau
+      // halaman baru tidak lagi me-rebuild AppBar dan FAB.
+      body: _NotesBody(
+        onEdit: (note) => _editNote(context, ref, note),
+        onDelete: (note) => _deleteNote(context, ref, note),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _addNote(context, ref),
@@ -118,33 +93,119 @@ class NotesPage extends ConsumerWidget {
   }
 }
 
-class _SearchBar extends ConsumerWidget {
-  const _SearchBar({required this.query});
-  final String query;
+class _NotesBody extends ConsumerWidget {
+  const _NotesBody({required this.onEdit, required this.onDelete});
+
+  final ValueChanged<Note> onEdit;
+  final ValueChanged<Note> onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(notesProvider);
+
+    return state.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => _ErrorState(
+        message: err is Failure
+            ? err.message
+            : 'Gagal memuat catatan. Silakan coba lagi.',
+        onRetry: () => ref.invalidate(notesProvider),
+      ),
+      data: (data) {
+        if (data.query.isEmpty && data.notes.isEmpty) {
+          return const Center(child: Text('Belum ada catatan.'));
+        }
+        return Column(
+          children: [
+            const _SearchBar(),
+            Expanded(
+              child: data.notes.isEmpty
+                  ? _EmptySearchState(query: data.query)
+                  : _NotesList(
+                      notes: data.notes,
+                      hasMore: data.hasMore,
+                      onLoadMore: () => _loadMore(context, ref),
+                      onEdit: onEdit,
+                      onDelete: onDelete,
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _loadMore(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(notesProvider.notifier).loadMore();
+    } catch (error) {
+      if (!context.mounted) return;
+      final message = error is Failure
+          ? error.message
+          : 'Gagal memuat catatan berikutnya.';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+}
+
+/// Search bar dengan debounce.
+///
+/// Sebelumnya setiap ketikan langsung mengubah provider sehingga seluruh
+/// halaman ikut rebuild dan daftar difilter ulang. Dengan debounce 300 ms,
+/// query hanya dikirim setelah pengguna berhenti mengetik.
+class _SearchBar extends ConsumerStatefulWidget {
+  const _SearchBar();
+
+  @override
+  ConsumerState<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends ConsumerState<_SearchBar> {
+  final TextEditingController _controller = TextEditingController();
+  Timer? _debounce;
+  String _text = '';
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    setState(() => _text = value);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      ref.read(notesProvider.notifier).setQuery(value);
+    });
+  }
+
+  void _clear() {
+    _debounce?.cancel();
+    _controller.clear();
+    setState(() => _text = '');
+    ref.read(notesProvider.notifier).setQuery('');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: TextField(
         key: const Key('searchNotesField'),
+        controller: _controller,
         decoration: InputDecoration(
           hintText: 'Cari catatan...',
           prefixIcon: const Icon(Icons.search),
-          suffixIcon: query.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    ref.read(noteSearchQueryProvider.notifier).clear();
-                  },
-                )
+          suffixIcon: _text.isNotEmpty
+              ? IconButton(icon: const Icon(Icons.clear), onPressed: _clear)
               : null,
           border: const OutlineInputBorder(),
           isDense: true,
         ),
-        onChanged: (val) {
-          ref.read(noteSearchQueryProvider.notifier).setQuery(val);
-        },
+        onChanged: _onChanged,
       ),
     );
   }
@@ -219,20 +280,72 @@ class _DeleteConfirmDialog extends StatelessWidget {
   }
 }
 
-class _NotesList extends StatelessWidget {
-  const _NotesList(this.notes, {required this.onEdit, required this.onDelete});
+class _NotesList extends StatefulWidget {
+  const _NotesList({
+    required this.notes,
+    required this.hasMore,
+    required this.onLoadMore,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final List<Note> notes;
+  final bool hasMore;
+  final VoidCallback onLoadMore;
   final ValueChanged<Note> onEdit;
   final ValueChanged<Note> onDelete;
 
   @override
+  State<_NotesList> createState() => _NotesListState();
+}
+
+class _NotesListState extends State<_NotesList> {
+  bool _requestedNextPage = false;
+
+  @override
+  void didUpdateWidget(covariant _NotesList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Daftar diganti (query berubah / refresh), izinkan request halaman lagi.
+    if (!identical(oldWidget.notes, widget.notes)) {
+      _requestedNextPage = false;
+    }
+  }
+
+  void _requestNextPage() {
+    if (_requestedNextPage) return;
+    _requestedNextPage = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onLoadMore();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final itemCount = widget.notes.length + (widget.hasMore ? 1 : 0);
+
     return ListView.builder(
-      itemCount: notes.length,
+      itemCount: itemCount,
+      // Keep-alive tidak diperlukan untuk daftar pendek; mematikan fitur ini
+      // mengurangi jumlah widget yang disimpan di memori saat scroll.
+      addAutomaticKeepAlives: false,
       itemBuilder: (context, index) {
-        final note = notes[index];
+        if (index >= widget.notes.length) {
+          _requestNextPage();
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+
+        final note = widget.notes[index];
         return ListTile(
+          key: ValueKey(note.id),
           title: Text(note.title),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,8 +358,8 @@ class _NotesList extends StatelessWidget {
           trailing: PopupMenuButton<String>(
             tooltip: 'Aksi ${note.title}',
             onSelected: (action) {
-              if (action == 'edit') onEdit(note);
-              if (action == 'delete') onDelete(note);
+              if (action == 'edit') widget.onEdit(note);
+              if (action == 'delete') widget.onDelete(note);
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'edit', child: Text('Edit')),

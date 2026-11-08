@@ -6,7 +6,11 @@ class GetNotes {
   const GetNotes(this._repository);
   final NoteRepository _repository;
 
-  Future<({List<Note> notes, Failure? failure})> call() {
-    return _repository.fetchNotes();
+  Future<({List<Note> notes, Failure? failure})> call({
+    int? limit,
+    int? offset,
+    String? query,
+  }) {
+    return _repository.fetchNotes(limit: limit, offset: offset, query: query);
   }
 }

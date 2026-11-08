@@ -5,7 +5,7 @@ Future<Database> openNotesDb() async {
   final dir = await getDatabasesPath();
   return openDatabase(
     p.join(dir, 'offline_notes.db'),
-    version: 2,
+    version: 3,
     onCreate: (db, version) async {
       await db.execute('''
         CREATE TABLE notes(
@@ -18,9 +18,20 @@ Future<Database> openNotesDb() async {
         )
       ''');
       await db.execute('''
+        CREATE INDEX idx_notes_updated_at
+        ON notes(updated_at DESC)
+      ''');
+      await db.execute('''
         CREATE TABLE cached_posts(
           id INTEGER PRIMARY KEY,
           payload TEXT NOT NULL,
+          cached_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE ai_cache(
+          cache_key TEXT PRIMARY KEY,
+          answer TEXT NOT NULL,
           cached_at TEXT NOT NULL
         )
       ''');
@@ -33,6 +44,19 @@ Future<Database> openNotesDb() async {
         await db.execute(
           'UPDATE notes SET created_at = updated_at WHERE created_at = \'\'',
         );
+      }
+      if (oldVersion < 3) {
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_notes_updated_at
+          ON notes(updated_at DESC)
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ai_cache(
+            cache_key TEXT PRIMARY KEY,
+            answer TEXT NOT NULL,
+            cached_at TEXT NOT NULL
+          )
+        ''');
       }
     },
   );

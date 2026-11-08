@@ -11,10 +11,22 @@ class NoteRepositoryImpl implements NoteRepository {
   final Future<Database> Function() _openDb;
 
   @override
-  Future<({List<Note> notes, Failure? failure})> fetchNotes() async {
+  Future<({List<Note> notes, Failure? failure})> fetchNotes({
+    int? limit,
+    int? offset,
+    String? query,
+  }) async {
     try {
       final db = await _openDb();
-      final rows = await db.query('notes', orderBy: 'updated_at DESC');
+      final trimmedQuery = query?.trim() ?? '';
+      final rows = await db.query(
+        'notes',
+        where: trimmedQuery.isEmpty ? null : 'title LIKE ?',
+        whereArgs: trimmedQuery.isEmpty ? null : ['%$trimmedQuery%'],
+        orderBy: 'updated_at DESC',
+        limit: limit,
+        offset: offset,
+      );
       final List<Note> notes = rows
           .map<Note>((row) => NoteModel.fromMap(row).toEntity())
           .toList();

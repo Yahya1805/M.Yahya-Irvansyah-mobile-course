@@ -2,7 +2,16 @@ import '../failures/failure.dart';
 import '../entities/note.dart';
 
 abstract class NoteRepository {
-  Future<({List<Note> notes, Failure? failure})> fetchNotes();
+  /// Mengambil catatan dengan pagination opsional.
+  ///
+  /// [limit] dan [offset] dipakai untuk lazy loading sehingga aplikasi tidak
+  /// memuat seluruh isi database sekaligus. [query] memfilter judul di level
+  /// database agar pencarian tetap benar meskipun baru sebagian halaman termuat.
+  Future<({List<Note> notes, Failure? failure})> fetchNotes({
+    int? limit,
+    int? offset,
+    String? query,
+  });
 
   Future<({Note? note, Failure? failure})> addNote({
     required String title,

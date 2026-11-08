@@ -12,14 +12,28 @@ class FakeNoteRepository implements NoteRepository {
   final bool fail;
 
   @override
-  Future<({List<Note> notes, Failure? failure})> fetchNotes() async {
+  Future<({List<Note> notes, Failure? failure})> fetchNotes({
+    int? limit,
+    int? offset,
+    String? query,
+  }) async {
     if (fail) {
       return (
         notes: const <Note>[],
         failure: const LocalFailure('db locked (simulasi)'),
       );
     }
-    return (notes: items, failure: null);
+    var result = List<Note>.of(items);
+    final trimmedQuery = query?.trim() ?? '';
+    if (trimmedQuery.isNotEmpty) {
+      final lower = trimmedQuery.toLowerCase();
+      result = result
+          .where((note) => note.title.toLowerCase().contains(lower))
+          .toList();
+    }
+    if (offset != null) result = result.skip(offset).toList();
+    if (limit != null) result = result.take(limit).toList();
+    return (notes: result, failure: null);
   }
 
   @override

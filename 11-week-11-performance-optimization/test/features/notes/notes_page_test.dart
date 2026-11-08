@@ -67,8 +67,23 @@ class _FakeNoteRepository implements NoteRepository {
   final List<Note> notes = [];
 
   @override
-  Future<({List<Note> notes, Failure? failure})> fetchNotes() async =>
-      (notes: List<Note>.of(notes), failure: null);
+  Future<({List<Note> notes, Failure? failure})> fetchNotes({
+    int? limit,
+    int? offset,
+    String? query,
+  }) async {
+    var result = List<Note>.of(notes);
+    final trimmedQuery = query?.trim() ?? '';
+    if (trimmedQuery.isNotEmpty) {
+      final lower = trimmedQuery.toLowerCase();
+      result = result
+          .where((note) => note.title.toLowerCase().contains(lower))
+          .toList();
+    }
+    if (offset != null) result = result.skip(offset).toList();
+    if (limit != null) result = result.take(limit).toList();
+    return (notes: result, failure: null);
+  }
 
   @override
   Future<({Note? note, Failure? failure})> addNote({

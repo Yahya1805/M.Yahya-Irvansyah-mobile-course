@@ -9,7 +9,11 @@ class MockNoteRepository implements NoteRepository {
   final List<Note> notes = [];
 
   @override
-  Future<({List<Note> notes, Failure? failure})> fetchNotes() async {
+  Future<({List<Note> notes, Failure? failure})> fetchNotes({
+    int? limit,
+    int? offset,
+    String? query,
+  }) async {
     return (notes: notes, failure: null);
   }
 
