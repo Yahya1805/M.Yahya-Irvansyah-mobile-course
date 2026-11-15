@@ -4,7 +4,8 @@ import 'package:my_app/task_service.dart';
 /// Fake implementation of [TaskRepository] untuk keperluan pengujian.
 /// Mengendalikan perilaku pengujian secara deterministik tanpa jaringan nyata.
 class FakeTaskRepository implements TaskRepository {
-  FakeTaskRepository({this.tasks = const [], this.error});
+  FakeTaskRepository({List<String>? tasks, this.error})
+      : tasks = List<String>.from(tasks ?? const []);
 
   final List<String> tasks;
   final Exception? error;
@@ -12,7 +13,13 @@ class FakeTaskRepository implements TaskRepository {
   @override
   Future<List<String>> getTasks() async {
     if (error != null) throw error!;
-    return tasks;
+    return List<String>.unmodifiable(tasks);
+  }
+
+  @override
+  Future<void> addTask(String task) async {
+    if (error != null) throw error!;
+    tasks.add(task);
   }
 }
 
@@ -63,7 +70,22 @@ void main() {
       expect(result, equals(expectedTasks));
     });
 
-    // 4. Uji skenario kegagalan: memastikan error dilemparkan dan TIDAK tertelan menjadi list kosong
+    // 4. Uji penambahan data valid melalui saveTask
+    test('menyimpan tugas baru yang valid ke repository', () async {
+      // Arrange
+      final fakeRepo = FakeTaskRepository(tasks: []);
+      final service = TaskService(fakeRepo);
+
+      // Act
+      final success = await service.saveTask('Tugas Pertama');
+      final tasks = await service.loadTasks();
+
+      // Assert
+      expect(success, isTrue);
+      expect(tasks, contains('Tugas Pertama'));
+    });
+
+    // 5. Uji skenario kegagalan: memastikan error dilemparkan dan TIDAK tertelan menjadi list kosong
     test('melemparkan exception ketika repository mengalami kegagalan', () async {
       // Arrange
       final simulatedError = Exception('Koneksi database/jaringan gagal');
@@ -82,19 +104,17 @@ void main() {
       );
     });
 
-    // 5. Uji skenario tipe error spesifik (misal FormatException atau StateError)
-    test('melemparkan subtype exception yang sesuai ketika repository gagal', () async {
+    // 6. Uji skenario validasi bisnis saveTask: melempar FormatException jika judul kosong
+    test('saveTask melempar FormatException jika judul kosong atau spasi', () async {
       // Arrange
-      final specificError = const FormatException('Format payload tidak valid');
-      final fakeRepo = FakeTaskRepository(error: specificError);
+      final fakeRepo = FakeTaskRepository();
       final service = TaskService(fakeRepo);
 
       // Act & Assert
       expect(
-        () => service.loadTasks(),
+        () => service.saveTask('   '),
         throwsA(isA<FormatException>()),
       );
     });
   });
 }
-
