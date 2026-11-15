@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'routes.dart';
+import 'task_list_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,57 +15,16 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.home});
+
+  final Widget? home;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       onGenerateRoute: onGenerateRoute,
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Profil Mahasiswa'),
-          // Daftar aksi const: tidak dibangun ulang setiap MyApp rebuild,
-          // dan tidak ada lagi Builder + closure di build method induk.
-          actions: const [
-            _ProfileActionButton(
-              tooltip: 'AI Multimodal (OCR, Vision, STT)',
-              icon: Icons.document_scanner,
-              route: aiMultimodalRoute,
-            ),
-            _ProfileActionButton(
-              tooltip: 'AI Chat Assistant',
-              icon: Icons.auto_awesome,
-              route: aiChatRoute,
-            ),
-            _ProfileActionButton(
-              tooltip: 'Galeri Gambar',
-              icon: Icons.photo_library_outlined,
-              route: galleryRoute,
-            ),
-            _ProfileActionButton(
-              tooltip: 'Postingan',
-              icon: Icons.rss_feed,
-              route: postsRoute,
-            ),
-            _ProfileActionButton(
-              tooltip: 'Catatan',
-              icon: Icons.note_alt_outlined,
-              route: notesRoute,
-            ),
-          ],
-        ),
-        body: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.school, size: 72),
-              SizedBox(height: 16),
-              Text('M.Yahya Irvansyah', style: TextStyle(fontSize: 24)),
-              Text('Pemrograman Mobile — Minggu 1'),
-            ],
-          ),
-        ),
-      ),
+      home: home ?? const TaskListPage(),
     );
   }
 }

@@ -1,6 +1,6 @@
 # Week 12 — Testing & Quality Assurance
 
-Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Software Testing & QA)** untuk mata kuliah **Pemrograman Mobile**. Folder ini mengimplementasikan strategi pengujian menyeluruh pada aplikasi Flutter, mencakup **Unit Testing**, **Asynchronous & Fake Repository Testing**, **Edge Cases Validation**, dan **Widget & UI Interaction Testing**.
+Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Software Testing & QA)** untuk mata kuliah **Pemrograman Mobile**. Folder ini mengimplementasikan strategi pengujian menyeluruh pada aplikasi Flutter, mencakup **Unit Testing**, **Asynchronous & Fake Repository Testing**, **Edge Cases Validation**, **Widget Testing**, serta **Integration & Regression Testing**.
 
 ---
 
@@ -12,6 +12,7 @@ Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Softwa
   * `feat/unit-testing-edge-cases` — implementasi validasi judul tugas dan pengujian kasus tepi (Bagian 3)
   * `feat/async-fake-repository-testing` — pengujian kode asinkron & isolasi dependensi via Fake Repository (Bagian 4)
   * `feat/widget-testing-ui-interaction` — pengujian widget, interaksi form, empty state, loading, dan error state (Bagian 5)
+  * `feat/integration-testing-regression` — pengujian integrasi alur E2E pada perangkat dan pencegahan regresi (Bagian 6)
 * **Baseline**: Project Week 11 (`11-week-11-performance-optimization`) yang membawa arsitektur bersih (*Clean Architecture*) dari Week 7 hingga optimasi performa Week 11.
 * **Fokus Pengujian**:
   1. Pengujian unit berbasis perilaku (*behavior-driven*) dengan pola AAA (*Arrange, Act, Assert*).
@@ -19,6 +20,7 @@ Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Softwa
   3. Pemisahan kontrak sumber data (*Interface Segregation*) & penghindaran dependensi jaringan langsung.
   4. Penggunaan *Test Double* (*Fake Repository*) untuk simulasi kondisi sukses dan kondisi gagal.
   5. Pengujian antarmuka widget: rendering, interaksi pengguna (`enterText`, `tap`), determinisme frame (`pump`, `pumpAndSettle`), serta penanganan berbagai status UI.
+  6. Pengujian integrasi alur penuh (*End-to-End*) menggunakan paket `integration_test` dan pengujian regresi berulang untuk menjaga stabilitas fitur.
 
 ---
 
@@ -140,6 +142,35 @@ Pengujian menggunakan `WidgetTester` untuk mensimulasikan interaksi nyata tanpa 
 
 ---
 
+### Bagian 6: Pengujian Integrasi dan Pencegahan Regresi
+
+#### 1. Konfigurasi Dependensi Integrasi (`pubspec.yaml`)
+Paket resmi `integration_test` ditambahkan ke dalam `dev_dependencies`:
+```yaml
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+```
+
+#### 2. Implementasi Pengujian Alur Penuh & Binding (`integration_test/app_test.dart`)
+Menggunakan `IntegrationTestWidgetsFlutterBinding.ensureInitialized()` untuk menghubungkan test runner dengan siklus hidup aplikasi di perangkat/emulator.
+
+#### 3. Skenario Pengujian Integrasi & Regresi:
+1. **Alur Pengguna Lengkap (E2E)**:
+   * Menjalankan fungsi `app.main()`.
+   * Menunggu UI terpasang (`tester.pumpAndSettle()`).
+   * Memasukkan teks judul tugas `'Baca materi'` ke `Key('task-title-field')`.
+   * Menekan tombol `Key('save-task-button')`.
+   * Memverifikasi teks `'Baca materi'` muncul di daftar tugas utama.
+2. **Pencegahan Regresi Judul Spasi**:
+   * Memastikan bug input berupa spasi saja `"     "` dicegah dan tidak pernah masuk ke daftar tugas.
+3. **Pencegahan Regresi State Overwrite**:
+   * Memastikan penambahan beberapa tugas berturut-turut tersimpan secara kumulatif dan tidak menimpa data yang telah ada.
+
+---
+
 ## 📁 Struktur File Week 12
 
 ```text
@@ -148,7 +179,7 @@ Pengujian menggunakan `WidgetTester` untuk mensimulasikan interaksi nyata tanpa 
 │   ├── is_valid_task_title.dart     # Logika validasi judul tugas (Bagian 3)
 │   ├── task_service.dart            # Kontrak TaskRepository & TaskService (Bagian 4)
 │   ├── task_list_page.dart          # Halaman UI Tugas & Form (Bagian 5)
-│   ├── main.dart                    # Entry point aplikasi
+│   ├── main.dart                    # Entry point aplikasi (terintegrasi TaskListPage)
 │   ├── core/                        # Database, network, performance utils
 │   └── features/                    # Modul Notes, Posts, Gallery, AI
 ├── test/
@@ -157,8 +188,10 @@ Pengujian menggunakan `WidgetTester` untuk mensimulasikan interaksi nyata tanpa 
 │   ├── task_list_page_test.dart     # Widget & UI interaction test (Bagian 5)
 │   ├── core/                        # Pengujian format & network interceptor
 │   └── features/                    # Pengujian modul notes, posts, ai
+├── integration_test/
+│   └── app_test.dart                # Pengujian integrasi E2E & regresi (Bagian 6)
 ├── README.md                        # Dokumentasi lengkap pengujian Week 12
-└── pubspec.yaml                     # Konfigurasi dependensi project
+└── pubspec.yaml                     # Konfigurasi dependensi project & integration_test
 ```
 
 ---
@@ -168,29 +201,30 @@ Pengujian menggunakan `WidgetTester` untuk mensimulasikan interaksi nyata tanpa 
 Jalankan pengujian melalui terminal:
 
 ```bash
-# Menjalankan pengujian validasi judul tugas (Bagian 3)
+# 1. Menjalankan pengujian unit (Bagian 3 & 4)
 flutter test test/is_valid_task_title_test.dart
-
-# Menjalankan pengujian asinkron dan Fake Repository (Bagian 4)
 flutter test test/task_service_test.dart
 
-# Menjalankan pengujian widget dan interaksi pengguna (Bagian 5)
+# 2. Menjalankan pengujian widget (Bagian 5)
 flutter test test/task_list_page_test.dart
 
-# Menjalankan seluruh pengujian di dalam folder
+# 3. Menjalankan seluruh unit & widget test suite secara berkala (Pencegahan Regresi)
 flutter test
+
+# 4. Menjalankan pengujian integrasi E2E pada emulator / perangkat aktif (Bagian 6)
+flutter test integration_test/app_test.dart -d <device_id>
 ```
 
 ---
 
 ## 🔄 Riwayat Branch & Langkah Push Git
 
-Untuk mempublikasikan perubahan pada branch `feat/widget-testing-ui-interaction`:
+Untuk mempublikasikan perubahan pada branch `feat/integration-testing-regression`:
 
 ```bash
 # 1. Pastikan branch aktif saat ini
 git branch --show-current
-# Output: feat/widget-testing-ui-interaction
+# Output: feat/integration-testing-regression
 
 # 2. Periksa status perubahan
 git status
@@ -199,8 +233,8 @@ git status
 git add 12-week-12-testing-quality-assurance/
 
 # 4. Commit perubahan
-git commit -m "feat(testing): implementasi TaskListPage, widget testing interaksi pengguna, empty state, loading, dan dokumentasi README"
+git commit -m "feat(testing): konfigurasi integration_test, implementasi E2E app_test, pencegahan regresi, dan dokumentasi README"
 
 # 5. Push branch baru ke remote GitHub
-git push -u origin feat/widget-testing-ui-interaction
+git push -u origin feat/integration-testing-regression
 ```

@@ -8,15 +8,23 @@ import 'features/chat_screen.dart';
 import 'features/gallery/gallery_screen.dart';
 import 'features/multimodal_ai_screen.dart';
 import 'features/posts/presentation/pages/posts_page.dart';
+import 'task_list_page.dart';
 
 const notesRoute = '/notes';
 const aiChatRoute = '/ai-chat';
 const aiMultimodalRoute = '/ai-multimodal';
 const galleryRoute = '/gallery';
 const postsRoute = '/posts';
+const tasksRoute = '/tasks';
 
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final route = parseRoute(settings.name);
+  if (route == tasksRoute) {
+    return MaterialPageRoute<void>(
+      settings: settings,
+      builder: (context) => const TaskListPage(),
+    );
+  }
   if (route == notesRoute) {
     return MaterialPageRoute<void>(
       settings: settings,
