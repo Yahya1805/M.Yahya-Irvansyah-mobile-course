@@ -1,6 +1,6 @@
 # Week 12 — Testing & Quality Assurance
 
-Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Software Testing & QA)** untuk mata kuliah **Pemrograman Mobile**. Folder ini mengimplementasikan strategi pengujian menyeluruh pada aplikasi Flutter, mencakup **Unit Testing**, **Asynchronous & Fake Repository Testing**, **Edge Cases Validation**, dan persiapan untuk **Widget Testing** serta **Integration Testing**.
+Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Software Testing & QA)** untuk mata kuliah **Pemrograman Mobile**. Folder ini mengimplementasikan strategi pengujian menyeluruh pada aplikasi Flutter, mencakup **Unit Testing**, **Asynchronous & Fake Repository Testing**, **Edge Cases Validation**, dan **Widget & UI Interaction Testing**.
 
 ---
 
@@ -11,12 +11,14 @@ Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Softwa
 * **Branch Git**:
   * `feat/unit-testing-edge-cases` — implementasi validasi judul tugas dan pengujian kasus tepi (Bagian 3)
   * `feat/async-fake-repository-testing` — pengujian kode asinkron & isolasi dependensi via Fake Repository (Bagian 4)
+  * `feat/widget-testing-ui-interaction` — pengujian widget, interaksi form, empty state, loading, dan error state (Bagian 5)
 * **Baseline**: Project Week 11 (`11-week-11-performance-optimization`) yang membawa arsitektur bersih (*Clean Architecture*) dari Week 7 hingga optimasi performa Week 11.
 * **Fokus Pengujian**:
   1. Pengujian unit berbasis perilaku (*behavior-driven*) dengan pola AAA (*Arrange, Act, Assert*).
   2. Cakupan kasus tepi (*edge cases*) dan batas input (*boundary values*).
   3. Pemisahan kontrak sumber data (*Interface Segregation*) & penghindaran dependensi jaringan langsung.
   4. Penggunaan *Test Double* (*Fake Repository*) untuk simulasi kondisi sukses dan kondisi gagal.
+  5. Pengujian antarmuka widget: rendering, interaksi pengguna (`enterText`, `tap`), determinisme frame (`pump`, `pumpAndSettle`), serta penanganan berbagai status UI.
 
 ---
 
@@ -27,12 +29,12 @@ Pengujian dirancang mengikuti piramida pengujian (*Testing Pyramid*):
 | Tingkatan Uji | Cakupan yang Diperiksa | Karakteristik | Implementasi pada Proyek |
 | :--- | :--- | :--- | :--- |
 | **Unit Test** | Logika fungsi, validasi, dan use case terisolasi tanpa UI | Cepat, deterministik, biaya pemeliharaan rendah | `isValidTaskTitle`, `TaskService`, Use Cases |
-| **Widget Test** | Rendering tampilan dan interaksi komponen antarmuka | Berjalan di lingkungan headless tanpa perangkat fisik | Validasi form, status kosong (*empty state*), list |
-| **Integration Test** | Alur lengkap aplikasi dari awal hingga akhir (*End-to-End*) | Mensimulasikan pengguna nyata di emulator / perangkat | Tambah catatan $\rightarrow$ pencarian $\rightarrow$ verifikasi list |
+| **Widget Test** | Rendering tampilan dan interaksi komponen antarmuka | Berjalan di lingkungan headless tanpa perangkat fisik | `TaskListPage`, validasi form, empty state, loading |
+| **Integration Test** | Alur lengkap aplikasi dari awal hingga akhir (*End-to-End*) | Mensimulasikan pengguna nyata di emulator / perangkat | Alur navigasi $\rightarrow$ form input $\rightarrow$ daftar |
 
 ### Prinsip Testability: Rancang Kode agar Mudah Diuji
 1. **Separation of Concerns**: Widget hanya menangani tampilan dan interaksi pengguna. Pengambilan dan manipulasi data didelegasikan ke *Service* atau *Repository*.
-2. **Dependency Inversion**: Service bergantung pada abstraksi (`TaskRepository`), bukan implementasi konkret (seperti HTTP client atau database lokal). Hal ini memungkinkan penggantian sumber data dengan `FakeTaskRepository` saat pengujian.
+2. **Dependency Inversion**: Service dan widget bergantung pada abstraksi (`TaskRepository`), bukan implementasi konkret. Hal ini memungkinkan penggantian sumber data dengan `FakeTaskRepository` saat pengujian widget.
 
 ---
 
@@ -112,22 +114,50 @@ class FakeTaskRepository implements TaskRepository {
 
 ---
 
+### Bagian 5: Pengujian Widget dan Interaksi Antarmuka
+
+#### 1. Implementasi Komponen UI (`lib/task_list_page.dart`)
+Widget `TaskListPage` dirancang untuk mengintegrasikan form input, validasi, dan rendering daftar tugas dengan `Key` eksplisit:
+* `Key('task-title-field')`: Input teks judul tugas.
+* `Key('save-task-button')`: Tombol simpan tugas baru.
+* `Key('task-loading-indicator')`: Indikator pemuatan data asinkron.
+* `Key('task-empty-state')`: Tampilan saat daftar tugas masih kosong (`Belum ada tugas`).
+* `Key('task-error-message')`: Pesan error ketika pemanggilan repository gagal.
+* `Key('task-list')`: Daftar tugas yang berhasil dimuat/ditambahkan.
+
+#### 2. Pengujian Tampilan & Interaksi (`test/task_list_page_test.dart`)
+Pengujian menggunakan `WidgetTester` untuk mensimulasikan interaksi nyata tanpa jeda buatan (`Future.delayed` dihindari):
+1. **Membangun Widget & Memeriksa Judul**: Menggunakan `tester.pumpWidget()` dan memverifikasi elemen teks `'Daftar tugas'` dengan `find.text()`.
+2. **Status Data Kosong (*Empty State*)**: Memastikan saat aplikasi baru dibuka, pesan `'Belum ada tugas'` muncul dan `ListView` belum dirender.
+3. **Interaksi Form & Penambahan Tugas**:
+   * Memasukkan teks melalui `tester.enterText(find.byKey(Key('task-title-field')), 'Baca materi')`.
+   * Menekan tombol melalui `tester.tap(find.byKey(Key('save-task-button')))`.
+   * Merender pembaruan state dengan `tester.pumpAndSettle()`.
+   * Memverifikasi teks `'Baca materi'` muncul pada layar dan input field otomatis dibersihkan.
+4. **Validasi Input Tidak Valid**: Menekan simpan saat field kosong atau hanya berisi spasi `"   "`, lalu memverifikasi pesan `'Judul tidak boleh kosong'` muncul dan tidak ada tugas baru yang dimasukkan.
+5. **Indikator Loading Terkendali**: Menggunakan `Completer` pada `FakeTaskRepositoryForWidget` untuk memverifikasi `CircularProgressIndicator` tampil saat proses memuat, dan hilang setelah `pumpAndSettle()`.
+6. **Penanganan Error pada UI**: Memastikan pesan kesalahan jaringan dari repository ditampilkan dengan tepat pada antarmuka.
+
+---
+
 ## 📁 Struktur File Week 12
 
 ```text
 12-week-12-testing-quality-assurance/
 ├── lib/
-│   ├── is_valid_task_title.dart     # Logika validasi judul tugas
-│   ├── task_service.dart            # Kontrak TaskRepository & TaskService
+│   ├── is_valid_task_title.dart     # Logika validasi judul tugas (Bagian 3)
+│   ├── task_service.dart            # Kontrak TaskRepository & TaskService (Bagian 4)
+│   ├── task_list_page.dart          # Halaman UI Tugas & Form (Bagian 5)
 │   ├── main.dart                    # Entry point aplikasi
 │   ├── core/                        # Database, network, performance utils
 │   └── features/                    # Modul Notes, Posts, Gallery, AI
 ├── test/
 │   ├── is_valid_task_title_test.dart# Unit test & edge cases (Bagian 3)
 │   ├── task_service_test.dart       # Async & Fake Repository test (Bagian 4)
+│   ├── task_list_page_test.dart     # Widget & UI interaction test (Bagian 5)
 │   ├── core/                        # Pengujian format & network interceptor
 │   └── features/                    # Pengujian modul notes, posts, ai
-├── README.md                        # Dokumentasi laporan pengujian
+├── README.md                        # Dokumentasi lengkap pengujian Week 12
 └── pubspec.yaml                     # Konfigurasi dependensi project
 ```
 
@@ -135,7 +165,7 @@ class FakeTaskRepository implements TaskRepository {
 
 ## 🚀 Panduan Menjalankan Pengujian
 
-Jalankan pengujian unit spesifik melalui terminal:
+Jalankan pengujian melalui terminal:
 
 ```bash
 # Menjalankan pengujian validasi judul tugas (Bagian 3)
@@ -143,6 +173,9 @@ flutter test test/is_valid_task_title_test.dart
 
 # Menjalankan pengujian asinkron dan Fake Repository (Bagian 4)
 flutter test test/task_service_test.dart
+
+# Menjalankan pengujian widget dan interaksi pengguna (Bagian 5)
+flutter test test/task_list_page_test.dart
 
 # Menjalankan seluruh pengujian di dalam folder
 flutter test
@@ -152,12 +185,12 @@ flutter test
 
 ## 🔄 Riwayat Branch & Langkah Push Git
 
-Untuk mempublikasikan perubahan pada branch `feat/async-fake-repository-testing`:
+Untuk mempublikasikan perubahan pada branch `feat/widget-testing-ui-interaction`:
 
 ```bash
 # 1. Pastikan branch aktif saat ini
 git branch --show-current
-# Output: feat/async-fake-repository-testing
+# Output: feat/widget-testing-ui-interaction
 
 # 2. Periksa status perubahan
 git status
@@ -166,8 +199,8 @@ git status
 git add 12-week-12-testing-quality-assurance/
 
 # 4. Commit perubahan
-git commit -m "feat(testing): implementasi kontrak TaskRepository, TaskService, FakeRepository, dan dokumentasi README week 12"
+git commit -m "feat(testing): implementasi TaskListPage, widget testing interaksi pengguna, empty state, loading, dan dokumentasi README"
 
 # 5. Push branch baru ke remote GitHub
-git push -u origin feat/async-fake-repository-testing
+git push -u origin feat/widget-testing-ui-interaction
 ```
