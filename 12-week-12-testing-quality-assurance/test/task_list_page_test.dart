@@ -26,6 +26,14 @@ class FakeTaskRepositoryForWidget implements TaskRepository {
     }
     return tasks;
   }
+
+  @override
+  Future<void> addTask(String task) async {
+    if (error != null) {
+      throw error!;
+    }
+    tasks.add(task);
+  }
 }
 
 void main() {

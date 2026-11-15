@@ -67,8 +67,11 @@ class _TaskListPageState extends State<TaskListPage> {
       return;
     }
 
+    final trimmed = text.trim();
+    widget.repository?.addTask(trimmed);
+
     setState(() {
-      _tasks.add(text.trim());
+      _tasks.add(trimmed);
       _controller.clear();
       _validationError = null;
     });
