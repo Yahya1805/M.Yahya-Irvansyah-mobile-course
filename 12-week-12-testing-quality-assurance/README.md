@@ -1,6 +1,6 @@
 # Week 12 — Testing & Quality Assurance
 
-Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Software Testing & QA)** untuk mata kuliah **Pemrograman Mobile**. Folder ini mengimplementasikan strategi pengujian menyeluruh pada aplikasi Flutter, mencakup **Unit Testing**, **Asynchronous & Fake Repository Testing**, **Edge Cases Validation**, **Widget Testing**, **Integration Testing**, dan penyusunan **Test Suite Terpadu Fitur Tugas**.
+Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Software Testing & QA)** untuk mata kuliah **Pemrograman Mobile**. Folder ini mengimplementasikan strategi pengujian menyeluruh pada aplikasi Flutter, mencakup **Unit Testing**, **Asynchronous & Fake Repository Testing**, **Edge Cases Validation**, **Widget Testing**, **Integration Testing**, penyusunan **Test Suite Terpadu Fitur Tugas**, evaluasi **Cakupan Pengujian (*Code Coverage*)**, serta **Refleksi Kualitas Kode**.
 
 ---
 
@@ -13,7 +13,8 @@ Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Softwa
   * `feat/async-fake-repository-testing` — pengujian kode asinkron & isolasi dependensi via Fake Repository (Bagian 4)
   * `feat/widget-testing-ui-interaction` — pengujian widget, interaksi form, empty state, loading, dan error state (Bagian 5)
   * `feat/integration-testing-regression` — pengujian integrasi alur E2E pada perangkat dan pencegahan regresi (Bagian 6)
-  * `feat/task-feature-test-suite` — penyusunan test suite lengkap fitur tugas mencakup logika, dependensi, UI, dan alur utama (Bagian 7)
+  * `feat/task-feature-test-suite` — penyusunan master test suite fitur tugas mencakup logika, dependensi, UI, dan alur utama (Bagian 7)
+  * `feat/testing-coverage-reflection` — evaluasi cakupan kode (*coverage*), pemenuhan tugas praktikum, dan refleksi mendalam (Bagian 8)
 * **Baseline**: Project Week 11 (`11-week-11-performance-optimization`) yang membawa arsitektur bersih (*Clean Architecture*) dari Week 7 hingga optimasi performa Week 11.
 * **Fokus Pengujian**:
   1. Pengujian unit berbasis perilaku (*behavior-driven*) dengan pola AAA (*Arrange, Act, Assert*).
@@ -23,6 +24,7 @@ Portofolio implementasi **Pengujian Perangkat Lunak dan Jaminan Kualitas (Softwa
   5. Pengujian antarmuka widget: rendering, interaksi pengguna (`enterText`, `tap`), determinisme frame (`pump`, `pumpAndSettle`), serta penanganan berbagai status UI.
   6. Pengujian integrasi alur penuh (*End-to-End*) menggunakan paket `integration_test` dan pengujian regresi berulang.
   7. Penyusunan *Test Suite* kohesif untuk fitur daftar tugas dengan skenario terstruktur.
+  8. Evaluasi cakupan pengujian (*coverage*) serta refleksi kritis pencegahan bug dan efektivitas fake repository.
 
 ---
 
@@ -206,6 +208,57 @@ Test suite terpadu disusun untuk memvalidasi perilaku fitur tugas secara kompreh
 
 ---
 
+### Bagian 8: Cakupan Pengujian, Evaluasi Tugas, dan Refleksi
+
+#### 1. Penggunaan Cakupan Kode (*Code Coverage*) sebagai Petunjuk
+Untuk menghasilkan laporan cakupan pengujian unit dan widget pada Flutter:
+```bash
+flutter test --coverage
+```
+Perintah ini menghasilkan berkas `coverage/lcov.info`.
+
+> [!IMPORTANT]
+> **Prinsip Evaluasi Cakupan:**
+> Angka persentase cakupan (*coverage percentage*) hanya mencerminkan baris kode (*line of code*) yang dieksekusi saat test runner berjalan. Angka tinggi **bukan jaminan mutlak** bahwa semua perilaku atau kondisi kegagalan telah diperiksa. Pengujian yang bermakna berfokus pada pemeriksaan cabang logika kritis (*branch coverage*), kasus batas (*boundary conditions*), dan skenario kegagalan, bukan sekadar menulis pengujian tanpa asersi hanya demi mendongkrak angka statistik.
+
+#### 2. Laporan Penyelesaian Tugas Codelab
+* **Pengujian Unit & Widget Fitur Utama**: Telah diimplementasikan penuh untuk fitur daftar tugas (`isValidTaskTitle`, `TaskService`, `TaskListPage`, dan `task_feature_test_suite_test.dart`), mencakup kasus sukses, input tidak valid, spasi tersembunyi, penanganan format error, indikator loading, dan rendering daftar.
+* **Pengujian Integrasi Alur Utama**: Diimplementasikan pada `integration_test/app_test.dart` menguji alur penambahan tugas dari peluncuran `app.main()` hingga verifikasi antarmuka.
+* **Catatan Pelaksanaan Uji Integrasi pada Perangkat**:
+  * Perintah eksekusi: `flutter test integration_test/app_test.dart -d <device_id>`.
+  * *Kendala & Catatan Lingkungan*: Pengujian integrasi membutuhkan perangkat fisik atau emulator Android/iOS/Desktop yang aktif terhubung. Jika tidak ada perangkat yang terdeteksi (`No supported devices connected`), Flutter Test runner tidak dapat meluncurkan driver integrasi pada level sistem operasi. Oleh karena itu, pengujian widget headless (`task_list_page_test.dart` dan group 4 `task_feature_test_suite_test.dart`) bertindak sebagai pelindung fungsional alur komponen yang dapat dijalankan secara instan di semua lingkungan CI/CD.
+
+#### 3. Refleksi Mendalam
+
+> **Q1: Bug apa yang paling mungkin terlewat tanpa pengujian yang Anda tulis?**
+>
+> **Jawaban:**
+> 1. **Silent Failure pada Whitespace**: Pengguna menekan tombol simpan dengan input yang hanya terdiri dari karakter spasi, tab, atau enter (`" \t\n "`). Tanpa pengujian validasi `.trim().isNotEmpty`, aplikasi akan menyimpan data kosong yang merusak tata letak UI atau menyebabkan kekacauan indeks di database.
+> 2. **Silent Failure pada Error Handling**: Kebiasaan menangani error dengan blok `catch` kosong yang mengembalikan list kosong (`[]`). Pengguna akan mengira aplikasi tidak memiliki tugas, padahal server sedang down (500) atau koneksi putus. Pengujian `TaskService` memastikan error dilemparkan secara eksplisit (`throwsA(isA<Exception>())`) dan UI menampilkan pesan error yang informatif.
+> 3. **Input Controller Tidak Dibersihkan**: Tanpa pengujian interaksi widget, kelupaan memanggil `controller.clear()` setelah data tersimpan sering terjadi, memaksa pengguna menghapus teks manual setiap kali menambah tugas.
+
+> **Q2: Bagian mana yang perlu fake, dan bagaimana fake itu membuat pengujian lebih konsisten?**
+>
+> **Jawaban:**
+> Bagian yang wajib menggunakan **Fake** adalah **abstraksi sumber data (`TaskRepository`)**.
+> 
+> *Alasan Konsistensi*:
+> * **Kecepatan & Independensi Jaringan**: Mengakses API jaringan riil atau database fisik memperkenalkan latensi, kebutuhan koneksi internet, ketergantungan server staging, dan risiko token autentikasi kedaluwarsa.
+> * **Isolasi State (Tanpa Kebocoran Data)**: Dengan `FakeTaskRepository`, data disimpan secara *in-memory* dan diinisialisasi ulang pada setiap blok `test()` / `testWidgets()`. Hal ini mencegah *state pollution* di mana data dari satu pengujian mencemari pengujian lainnya.
+> * **Kemudahan Simulasi Kegagalan (*Fault Injection*)**: Dengan fake repository, kita dapat menginjeksi error secara deterministik (misalnya melemparkan `Exception('Simulasi kegagalan server 500')`) untuk memverifikasi apakah UI dan service bereaksi dengan tepat saat skenario terburuk terjadi.
+
+> **Q3: Apa perbedaan nilai yang diberikan pengujian widget dan pengujian integrasi pada fitur Anda?**
+>
+> **Jawaban:**
+> * **Nilai Pengujian Widget**:
+>   * *Fokus*: Siklus hidup komponen UI, rendering terisolasi, dan respon terhadap aksi lokal (`enterText`, `tap`).
+>   * *Kelebihan*: Berjalan sangat cepat dalam lingkungan headless (tanpa emulator), memudahkan pengujian kondisi visual kompleks seperti *loading state* (menggunakan `Completer`), validasi form, dan pesan kesalahan visual.
+> * **Nilai Pengujian Integrasi**:
+>   * *Fokus*: Validasi alur aplikasi secara holistik dari awal hingga akhir (*End-to-End*) pada perangkat atau emulator nyata.
+>   * *Kelebihan*: Memeriksa kompatibilitas runtime penuh, inisialisasi framework (`main()`), manajemen memori, rendering GPU, dan interaksi nyata pada sistem operasi yang tidak bisa ditangkap oleh pengujian headless.
+
+---
+
 ## 📁 Struktur File Week 12
 
 ```text
@@ -225,8 +278,8 @@ Test suite terpadu disusun untuk memvalidasi perilaku fitur tugas secara kompreh
 │   ├── core/                            # Pengujian format & network interceptor
 │   └── features/                        # Pengujian modul notes, posts, ai
 ├── integration_test/
-│   └── app_test.dart                    # Pengujian integrasi E2E & regresi (Bagian 6)
-├── README.md                            # Dokumentasi lengkap pengujian Week 12
+│   └── app_test.dart                    # Pengujian integrasi E2E & regresi (Bagian 6 & 8)
+├── README.md                            # Dokumentasi lengkap pengujian Week 12 & Refleksi
 └── pubspec.yaml                         # Konfigurasi dependensi project & integration_test
 ```
 
@@ -237,29 +290,42 @@ Test suite terpadu disusun untuk memvalidasi perilaku fitur tugas secara kompreh
 Jalankan pengujian dan analisis kode melalui terminal:
 
 ```bash
-# 1. Analisis kode untuk memastikan tidak ada issue
+# 1. Analisis kode statis
 flutter analyze
 
-# 2. Menjalankan Master Test Suite Fitur Tugas (Bagian 7)
-flutter test test/task_feature_test_suite_test.dart
-
-# 3. Menjalankan seluruh test suite unit & widget
+# 2. Menjalankan seluruh pengujian unit & widget
 flutter test
 
-# 4. Menjalankan pengujian integrasi E2E pada emulator / perangkat fisik
+# 3. Menjalankan pengujian dengan laporan cakupan kode (Code Coverage)
+flutter test --coverage
+
+# 4. Menjalankan Master Test Suite Fitur Tugas secara spesifik
+flutter test test/task_feature_test_suite_test.dart
+
+# 5. Menjalankan pengujian integrasi E2E pada emulator / perangkat fisik
 flutter test integration_test/app_test.dart -d <device_id>
 ```
 
 ---
 
+## 📚 Referensi Pendukung
+
+* [Slide Minggu 12: Pengujian dan Jaminan Kualitas](https://jti-polinema.github.io/flutter-codelab/00-slides/Week_12_Testing_Quality_Assurance.html)
+* [Testing Flutter apps — Dokumentasi Resmi Flutter](https://docs.flutter.dev/testing/overview)
+* [Introduction to widget testing — Flutter Cookbook](https://docs.flutter.dev/cookbook/testing/widget/introduction)
+* [Integration testing — Flutter Official Docs](https://docs.flutter.dev/testing/integration-tests)
+* [Dart test package — Pub.dev](https://pub.dev/packages/test)
+
+---
+
 ## 🔄 Riwayat Branch & Langkah Push Git
 
-Untuk mempublikasikan perubahan pada branch `feat/task-feature-test-suite`:
+Untuk mempublikasikan perubahan pada branch `feat/testing-coverage-reflection`:
 
 ```bash
 # 1. Pastikan branch aktif saat ini
 git branch --show-current
-# Output: feat/task-feature-test-suite
+# Output: feat/testing-coverage-reflection
 
 # 2. Periksa status perubahan
 git status
@@ -268,8 +334,8 @@ git status
 git add 12-week-12-testing-quality-assurance/
 
 # 4. Commit perubahan
-git commit -m "feat(testing): susun master test suite fitur tugas (unit, fake repo, widget, integrasi) dan lengkapi README"
+git commit -m "docs(week12): lengkapi laporan cakupan pengujian, penyelesaian tugas, dan refleksi QA di README"
 
 # 5. Push branch baru ke remote GitHub
-git push -u origin feat/task-feature-test-suite
+git push -u origin feat/testing-coverage-reflection
 ```
