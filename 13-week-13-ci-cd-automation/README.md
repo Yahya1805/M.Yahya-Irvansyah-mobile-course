@@ -137,10 +137,29 @@ Pipeline telah diintegrasikan pada branch `feat/ci-cd-automation` dan di-push ke
 | `4c6f8b2` | `feat(ci): add flutter-ci workflow and fix local format and tests for week 13` | Penyiapan workflow CI awal, pembersihan format `main.dart`, konfigurasi linter, dan penyesuaian unit test. |
 | `cbf6139` | `feat(ci): add android apk and aab release build and artifact upload steps` | Penambahan build release APK & AAB serta konfigurasi `upload-artifact@v4`. |
 | `ab0c9dc` | `docs(week13): add comprehensive documentation on ci cd pipeline, versioning, and secrets security` | Dokumentasi arsitektur CI/CD, SemVer, dan mitigasi keamanan. |
+| `2c67e8f` | `docs(week13): complete full practical report, evaluation, and reflection for week 13` | Laporan evaluasi tugas, jawaban refleksi, dan panduan pipeline. |
 
 ---
 
-## 6. Refleksi
+## 6. Panduan Menjalankan & Memverifikasi di GitHub Actions
+
+1. **Memantau Status Build:**
+   * Buka repositori di GitHub: [Yahya1805/M.Yahya-Irvansyah-mobile-course](https://github.com/Yahya1805/M.Yahya-Irvansyah-mobile-course).
+   * Klik tab **Actions** di panel atas repositori.
+   * Pilih workflow run **Flutter CI** yang sedang berjalan pada branch `feat/ci-cd-automation`.
+   * Tinjau setiap step: `Verify Code Formatting`, `Run Static Analysis`, `Run Automated Tests`, `Build APK`, dan `Build App Bundle`. Pastikan seluruh step berstatus hijau centang (success).
+
+2. **Mengunduh Artefak Biner:**
+   * Setelah job `test-and-build` selesai, gulir ke bagian paling bawah pada halaman detail workflow run (**Artifacts**).
+   * Klik artefak **`android-builds`** (format zip) untuk mengunduh paket biner `app-release.apk` dan `app-release.aab`.
+
+3. **Membuat Pull Request (PR):**
+   * Buat Pull Request dari branch `feat/ci-cd-automation` ke branch `develop` (atau `main`).
+   * GitHub Actions akan secara otomatis menjalankan status checks pada PR untuk memastikan bahwa perubahan memenuhi standar sebelum di-merge.
+
+---
+
+## 7. Refleksi
 
 ### 1. Masalah apa yang ditemukan otomatis sebelum perubahan di-merge?
 1. **Ketidakrapian Format Kode:** Perintah `dart format` mendeteksi bahwa berkas `lib/main.dart` belum mengikuti konvensi indentasi resmi Dart. CI secara otomatis menggagalkan build jika ada kode yang belum diformat rapi.
@@ -157,3 +176,13 @@ Pipeline telah diintegrasikan pada branch `feat/ci-cd-automation` dan di-push ke
 1. **Exploratory & Usability Testing:** Pengujian pengalaman pengguna (UX) langsung pada perangkat fisik dengan berbagai ukuran layar dan kondisi jaringan nyata.
 2. **Verifikasi Fungsionalitas End-to-End:** Pengujian integrasi sensor fisik perangkat (kamera, GPS, biometric) dan integrasi layanan pihak ketiga (push notification FCM, payment gateway).
 3. **Release Approval & Store Compliance:** Persetujuan akhir dari Tech Lead/Product Owner, peninjauan *release notes* (changelog), dan kepatuhan terhadap kebijakan privasi Google Play Developer Policy.
+
+---
+
+## 8. Referensi Pendukung
+* [Slide Minggu 13: CI/CD dan Otomatisasi](https://jti-polinema.github.io/flutter-codelab/00-slides/Week_13_CICD_Automation.html)
+* [GitHub Actions Documentation](https://docs.github.com/actions)
+* [Continuous Delivery with Flutter](https://docs.flutter.dev/deployment/cd)
+* [Build and Release an Android App](https://docs.flutter.dev/deployment/android)
+* [Using Secrets in GitHub Actions](https://docs.github.com/actions/security-guides/using-secrets-in-github-actions)
+* [Semantic Versioning 2.0.0](https://semver.org/)

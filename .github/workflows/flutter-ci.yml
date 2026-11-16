@@ -2,7 +2,7 @@ name: Flutter CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'feat/**']
     paths:
       - '13-week-13-ci-cd-automation/**'
       - '.github/workflows/flutter-ci.yml'
